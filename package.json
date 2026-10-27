@@ -46,7 +46,10 @@
     "prepublishOnly": "pnpm test && pnpm typecheck && pnpm build",
     "release": "npm publish --access public",
     "release:dry": "npm publish --dry-run",
-    "build:examples": "vite build --mode examples"
+    "build:examples": "vite build --mode examples",
+    "push:patch": "npm version patch && git push --follow-tags",
+    "push:minor": "npm version minor && git push --follow-tags",
+    "push:major": "npm version major && git push --follow-tags"
   },
   "keywords": [
     "seismology",

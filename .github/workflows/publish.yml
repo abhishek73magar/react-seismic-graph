@@ -14,11 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: npm # optional: add required reviewers to this environment in GitHub to approve each release
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
         with:
           version: 11
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24 # ships npm 11.5+, needed for Trusted Publishing
           registry-url: https://registry.npmjs.org

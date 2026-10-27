@@ -1,0 +1,34 @@
+name: Publish to npm
+
+# Release: `npm version patch` (bumps package.json + creates tag v0.1.1), then `git push --follow-tags`.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write # npm Trusted Publishing (OIDC): no npm token stored in GitHub, provenance added automatically
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm # optional: add required reviewers to this environment in GitHub to approve each release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # ships npm 11.5+, needed for Trusted Publishing
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Tag must match package.json version
+        run: |
+          PKG="v$(node -p "require('./package.json').version")"
+          if [ "$PKG" != "$GITHUB_REF_NAME" ]; then echo "tag $GITHUB_REF_NAME != package.json $PKG"; exit 1; fi
+
+      # prepublishOnly runs test + typecheck + build first; a failure stops the publish
+      - run: npm publish --access public

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>react-seismic-graph: plain HTML</title>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; background: #f8fafc; }
+      main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+      section { background: #fff; border: 1px solid #e2e8f0; padding: 12px; margin-bottom: 16px; }
+      h2 { margin: 0 0 8px; font-size: 16px; }
+      sp-helicorder, sp-seismograph { display: block; width: 100%; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a href="./index.html">← React examples</a>
+      <section>
+        <h2>SpectrogramWidget (live, no framework)</h2>
+        <!-- the widget sizes the canvas to its parent's width -->
+        <div><canvas id="spectro"></canvas></div>
+        <button id="mode">view: dual</button>
+      </section>
+      <section>
+        <h2>HelicorderWidget</h2>
+        <div><canvas id="heli"></canvas></div>
+        <p id="clicked">click a line</p>
+      </section>
+      <section>
+        <h2>seisplotjs &lt;sp-seismograph&gt;</h2>
+        <sp-seismograph id="sg" style="height: 220px"></sp-seismograph>
+      </section>
+    </main>
+
+    <script type="module">
+      // in your page: import from 'https://cdn.jsdelivr.net/npm/react-seismic-graph/dist/index.js'
+      // (or <script src=".../dist/seismic-graph.iife.js"> and use window.SeismicGraph)
+      import { SpectrogramWidget, HelicorderWidget } from 'react-seismic-graph'
+      import { renderSpSeismograph } from 'react-seismic-graph/seisplotjs'
+      import { makeTrace } from './synthetic.ts'
+
+      const SR = 100
+      const now = Date.now()
+
+      // waveform + spectrogram: 2 min history, then a packet every 500 ms
+      const spectro = new SpectrogramWidget(document.getElementById('spectro'), {
+        stationId: 'NP.KTM.00.HHZ', channel: 'HHZ', unit: 'm/s', sampleRate: SR, timeWindowSec: 120, theme: 'dark', timeMode: 'UTC',
+      })
+      spectro.hydrateHistorical(makeTrace(now - 120_000, 120, SR, [{ at: now - 60_000, amp: 10 }]), SR, now)
+      let t = now
+      setInterval(() => { t += 500; spectro.addSamples(makeTrace(t, 0.5, SR, [], t % 1e6), t) }, 500)
+
+      const modes = ['dual', 'waveform', 'spectrogram']
+      document.getElementById('mode').onclick = (e) => {
+        const next = modes[(modes.indexOf(spectro.viewMode) + 1) % modes.length]
+        spectro.setViewMode(next)
+        e.target.textContent = `view: ${next}`
+      }
+
+      // helicorder: last 6 h, 30-min lines
+      const start = Math.floor(now / 1_800_000) * 1_800_000 - 6 * 3_600_000
+      const heli = new HelicorderWidget(document.getElementById('heli'), {
+        startTime: start, numLines: 13, lineDurationSec: 1800, sampleRate: 20, timeMode: 'UTC', title: 'NP.KTM.00.HHZ',
+        pWaves: [{ datetime: new Date(start + 2.2 * 3_600_000).toISOString(), name: 'EQ', magnitude: 4.8 }],
+        onClick: (ms) => { document.getElementById('clicked').textContent = `clicked ${new Date(ms).toISOString()}` },
+      })
+      heli.setData(makeTrace(start, (now - start) / 1000, 20, [{ at: start + 2.2 * 3_600_000, amp: 12 }]), 20, start)
+
+      // seisplotjs element, plain samples in
+      renderSpSeismograph(document.getElementById('sg'), {
+        channel: 'HHZ', sampleRate: SR, startTime: now - 120_000, samples: makeTrace(now - 120_000, 120, SR, [{ at: now - 90_000, amp: 10 }]),
+      }, { unit: 'm/s', channel: 'HHZ' })
+    </script>
+  </body>
+</html>

@@ -1,0 +1,82 @@
+{
+  "name": "react-seismic-graph",
+  "version": "0.1.0",
+  "description": "Seismic waveform + spectrogram, helicorder and seisplotjs wrappers for React and plain HTML",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abhishek73magar/react-seismic-graph.git"
+  },
+  "homepage": "https://github.com/abhishek73magar/react-seismic-graph#readme",
+  "bugs": {
+    "url": "https://github.com/abhishek73magar/react-seismic-graph/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./react": {
+      "types": "./dist/types/react/index.d.ts",
+      "import": "./dist/react.js",
+      "require": "./dist/react.cjs"
+    },
+    "./seisplotjs": {
+      "types": "./dist/types/seisplotjs/index.d.ts",
+      "import": "./dist/seisplotjs.js",
+      "require": "./dist/seisplotjs.cjs"
+    }
+  },
+  "unpkg": "./dist/seismic-graph.iife.js",
+  "jsdelivr": "./dist/seismic-graph.iife.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && vite build --mode iife && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import ./test/register.mjs test/core.test.ts && node --import ./test/register.mjs test/mseed.test.ts",
+    "prepublishOnly": "pnpm test && pnpm typecheck && pnpm build",
+    "release": "npm publish --access public",
+    "release:dry": "npm publish --dry-run"
+  },
+  "keywords": [
+    "seismology",
+    "seismogram",
+    "spectrogram",
+    "helicorder",
+    "waveform",
+    "seisplotjs",
+    "react",
+    "canvas"
+  ],
+  "peerDependencies": {
+    "react": ">=18",
+    "seisplotjs": ">=3"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "seisplotjs": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "seisplotjs": "3.2.7",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  }
+}

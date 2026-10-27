@@ -1,6 +1,6 @@
 {
   "name": "react-seismic-graph",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Seismic waveform + spectrogram, helicorder and seisplotjs wrappers for React and plain HTML",
   "license": "MIT",
   "repository": {

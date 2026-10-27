@@ -31,4 +31,4 @@ jobs:
           if [ "$PKG" != "$GITHUB_REF_NAME" ]; then echo "tag $GITHUB_REF_NAME != package.json $PKG"; exit 1; fi
 
       # prepublishOnly runs test + typecheck + build first; a failure stops the publish
-      - run: npm publish --access public
+      - run: pnpm publish --access public --no-git-checks

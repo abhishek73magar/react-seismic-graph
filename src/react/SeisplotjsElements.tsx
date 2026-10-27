@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import * as sp from 'seisplotjs'
 import type { ChunkSource } from '../core/HelicorderWidget'
 import { useMseed } from './useMseed'
-import { streamMseed, type MseedInput } from '../seisplotjs/mseed'
+import { streamMseed, type MseedInput } from '../mseed'
 import { toSeismogram, renderSpHelicorder, renderSpSeismograph, type SeismogramInput, type SpHelicorderOptions, type SpSeismographOptions } from '../seisplotjs'
 
 // custom elements are created imperatively: no JSX IntrinsicElements typing needed in the consumer's app

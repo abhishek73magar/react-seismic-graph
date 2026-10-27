@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { downloadMseed } from '../seisplotjs/mseed'
+import { downloadMseed } from '../mseed'
 import type { StreamData } from '../core/types'
 
 // Material Design icons (Apache 2.0) as inline SVG: the same icons as react-icons/md, without the dependency

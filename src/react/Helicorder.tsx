@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { HelicorderWidget, type ChunkSource, type HelicorderOptions } from '../core/HelicorderWidget'
 import { toMs } from '../core/time'
 import { stationIdOf } from '../core/seismogram'
-import { mseedBytesOf, streamMseed, type MseedInput } from '../seisplotjs/mseed'
+import { mseedBytesOf, streamMseed, type MseedInput } from '../mseed'
 import { DownloadButton } from './icons'
 import type { PWave, Samples, StreamData, ThemeName } from '../core/types'
 

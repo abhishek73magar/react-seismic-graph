@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { loadMseed, type MseedInput } from '../seisplotjs/mseed'
+import { loadMseed, type MseedInput } from '../mseed'
 import type { StreamData } from '../core/types'
 
 const EMPTY: StreamData[] = []

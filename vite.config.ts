@@ -21,7 +21,9 @@ export default defineConfig(({ command, mode }) => {
     },
     resolve: {
       alias: [
+        { find: /^react-seismic-graph\/react\/seisplotjs$/, replacement: r('src/react/seisplotjs.ts') },
         { find: /^react-seismic-graph\/react$/, replacement: r('src/react/index.ts') },
+        { find: /^react-seismic-graph\/mseed$/, replacement: r('src/mseed/index.ts') },
         { find: /^react-seismic-graph\/seisplotjs$/, replacement: r('src/seisplotjs/index.ts') },
         { find: /^react-seismic-graph$/, replacement: r('src/index.ts') },
       ],
@@ -39,7 +41,7 @@ export default defineConfig(({ command, mode }) => {
     build: {
       sourcemap: true,
       lib: {
-        entry: { index: r('src/index.ts'), react: r('src/react/index.ts'), seisplotjs: r('src/seisplotjs/index.ts') },
+        entry: { index: r('src/index.ts'), react: r('src/react/index.ts'), 'react-seisplotjs': r('src/react/seisplotjs.ts'), seisplotjs: r('src/seisplotjs/index.ts'), mseed: r('src/mseed/index.ts') },
         formats: ['es', 'cjs'],
       },
       rollupOptions: { external: [/^react($|\/)/, /^react-dom($|\/)/, /^seisplotjs($|\/)/] },

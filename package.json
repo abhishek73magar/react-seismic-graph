@@ -1,6 +1,6 @@
 {
   "name": "react-seismic-graph",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Seismic waveform + spectrogram, helicorder and seisplotjs wrappers for React and plain HTML",
   "license": "MIT",
   "repository": {
@@ -30,6 +30,16 @@
       "import": "./dist/react.js",
       "require": "./dist/react.cjs"
     },
+    "./react/seisplotjs": {
+      "types": "./dist/types/react/seisplotjs.d.ts",
+      "import": "./dist/react-seisplotjs.js",
+      "require": "./dist/react-seisplotjs.cjs"
+    },
+    "./mseed": {
+      "types": "./dist/types/mseed/index.d.ts",
+      "import": "./dist/mseed.js",
+      "require": "./dist/mseed.cjs"
+    },
     "./seisplotjs": {
       "types": "./dist/types/seisplotjs/index.d.ts",
       "import": "./dist/seisplotjs.js",
@@ -42,7 +52,7 @@
     "dev": "vite",
     "build": "vite build && vite build --mode iife && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "node --import ./test/register.mjs test/core.test.ts && node --import ./test/register.mjs test/mseed.test.ts",
+    "test": "node --import ./test/register.mjs test/core.test.ts && node --import ./test/register.mjs test/mseed.test.ts && node --import ./test/register.mjs test/decode.test.ts",
     "prepublishOnly": "pnpm test && pnpm typecheck && pnpm build",
     "release": "npm publish --access public",
     "release:dry": "npm publish --dry-run",

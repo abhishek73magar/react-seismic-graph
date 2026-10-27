@@ -8,17 +8,20 @@ Extracted from the AlertNepal web app (`alertnepal_web_v3`, `components/Seismic`
 
 | Entry | What | Needs |
 |---|---|---|
-| `react-seismic-graph` | Framework-free core: `SpectrogramWidget`, `HelicorderWidget`, helpers | nothing |
-| `react-seismic-graph/react` | React components (and re-exports the core) | `react`, `seisplotjs` |
-| `react-seismic-graph/seisplotjs` | `renderSpHelicorder`, `renderSpSeismograph`, `parseMseed`, `loadMseed`, `streamsToMseed3`, `toSeismogram` | `seisplotjs` |
+| `react-seismic-graph` | Framework-free core: `SpectrogramWidget`, `HelicorderWidget`, miniSEED decoding, helpers | nothing |
+| `react-seismic-graph/react` | React components (and re-exports the core) | `react` |
+| `react-seismic-graph/mseed` | miniSEED only: `parseMseed`, `streamMseed`, `loadMseed`, `streamsToMseed3`, `decodeRecords`, downloads | nothing |
+| `react-seismic-graph/react/seisplotjs` | `SpHelicorder`, `SpSeismograph` (React wrappers of seisplotjs' web components) | `react`, `seisplotjs` |
+| `react-seismic-graph/seisplotjs` | `renderSpHelicorder`, `renderSpSeismograph`, `toSeismogram` | `seisplotjs` |
 | `dist/seismic-graph.iife.js` | Core as one `<script>` file, global `SeismicGraph` | nothing |
 
 ## Install
 
 ```bash
 npm i react-seismic-graph
-# React components and seisplotjs wrappers also need:
-npm i react seisplotjs
+# React components also need react; only the Sp* seisplotjs wrappers need seisplotjs:
+npm i react
+npm i seisplotjs   # optional
 ```
 
 ## Data shape
@@ -53,7 +56,7 @@ const stream = { ...fromSeismogram(seis), unit: 'counts' }
 
 ## miniSEED
 
-Every component takes miniSEED directly through an `mseed` prop. Version 2 and 3 are both detected automatically. The prop accepts:
+Every component takes miniSEED directly through an `mseed` prop. Version 2 and 3 are both detected automatically, and decoding is built in (no seisplotjs): int16, int32, float32, float64, Steim1 and Steim2. The prop accepts:
 - raw bytes: an `ArrayBuffer` or `Uint8Array`, for example from your API
 - a `File` or `Blob`, for example from `<input type="file">`
 - a URL, for example an fdsnws `dataselect` query
@@ -99,12 +102,13 @@ A file holding several stations is grouped by `NET.STA.LOC` in `SeismicStations`
 Without components:
 
 ```ts
-import { parseMseed, loadMseed, streamsToMseed3 } from 'react-seismic-graph/seisplotjs'
+import { parseMseed, loadMseed, streamMseed, streamsToMseed3, decodeRecords } from 'react-seismic-graph/mseed'
 
 const streams = parseMseed(arrayBuffer)            // StreamData[] (sync)
 const fromUrl = await loadMseed(url)               // also File / Blob
 const bytes = streamsToMseed3(streams)             // StreamData[] -> miniSEED 3, e.g. for a download
 for await (const chunk of streamMseed(url)) { }    // progressive: StreamData[] per batch of complete records
+const records = decodeRecords(new Uint8Array(frame)) // raw records: codes, startTime (UTC ms), sampleRate, samples
 // React: const { streams, loading, error } = useMseed(input)
 ```
 
@@ -161,12 +165,25 @@ import { SeismicStream } from 'react-seismic-graph/react'
   pWaves={pWaves}
   live={false}                       // true: axis ends at the freshest channel and hides the first 5 s
   defaultChannels={['HHZ']}
-  defaultViewMode="dual"             // also 'seisplotjs'
+  defaultViewMode="dual"             // 'dual' | 'waveform' | 'spectrogram'
   timeMode="local"
 />
 ```
 
-It includes a channel picker (All / each channel), a light/dark toggle, a RAW/OFFSET toggle, linked zoom/pan, and a view mode switch. All channels share one time axis.
+It includes a channel picker (All / each channel), a light/dark toggle, a RAW/OFFSET toggle, linked zoom/pan, and a view mode switch (dual / waveform / spectrogram). All channels share one time axis.
+
+**Live channels.** List the channels with no samples and pass `onReady(channel, widget)`: each graph is drawn empty and you push packets into it. Return a cleanup to unsubscribe.
+
+```tsx
+const streams = useMemo(() => ['HHZ', 'HHN', 'HHE'].map(channel => ({ channel, samples: [], sampleRate: 100, startTime: 0 })), [])
+const onReady = useCallback((channel, widget) => {
+  return feed.subscribe(channel, (samples, lastSampleMs) => widget.addSamples(samples, lastSampleMs))
+}, [])
+
+<SeismicStream stationId="NP.KTM.00" streams={streams} live onReady={onReady} />
+```
+
+**Flags.** `flags` (each with a `channel_code`), `flagEditable`, `onFlagAdd(ms, channel)`, `onFlagMove`, `onFlagRemove`: every graph shows its own channel's flags.
 
 The toolbar uses built-in Material icons drawn as inline SVG, so no icon library is needed. To swap any of them, pass your own React nodes:
 
@@ -174,7 +191,7 @@ The toolbar uses built-in Material icons drawn as inline SVG, so no icon library
 import { FaMoon, FaSun } from 'react-icons/fa'
 
 <SeismicStream icons={{ light: <FaSun />, dark: <FaMoon /> }} ... />
-// names: dual, waveform, spectrogram, seisplotjs, light, dark, link, unlink
+// names: dual, waveform, spectrogram, light, dark, link, unlink, download
 // the built-in ones are exported too: <Icon name="spectrogram" size={20} />
 ```
 
@@ -256,8 +273,10 @@ How it behaves:
 
 ### seisplotjs components
 
+Separate entry, so the rest of the package never bundles seisplotjs:
+
 ```tsx
-import { SpHelicorder, SpSeismograph } from 'react-seismic-graph/react'
+import { SpHelicorder, SpSeismograph } from 'react-seismic-graph/react/seisplotjs'
 
 <SpHelicorder data={seismograms /* or StreamData */} start={dayStart} end={dayEnd} lineDurationSec={3600} timeZone="UTC" pWaves={pWaves} onClick={(ms) => ...} />
 // lineDurationSec: 3600 = 1 h per line (default), 60 = 1 min per line, 600 = 10 min ...
@@ -353,7 +372,7 @@ The examples use synthetic data (`examples/synthetic.ts`); the `fdsn` example lo
 ## Develop
 
 ```bash
-pnpm test        # core logic checks (node, no browser)
+pnpm test        # core logic checks (node, no browser); decoder compared with seisplotjs on real FDSN files in test/fixtures
 pnpm typecheck
 pnpm build       # dist/: ESM + CJS per entry, IIFE core, .d.ts
 ```

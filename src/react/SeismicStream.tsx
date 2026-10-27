@@ -1,26 +1,25 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { toMs } from '../core/time'
 import { groupStations, stationIdOf } from '../core/seismogram'
-import type { MseedInput } from '../seisplotjs/mseed'
+import type { MseedInput } from '../mseed'
 import { useMseed } from './useMseed'
 import type { PWave, StationData, StreamData, ThemeName, ViewMode, YMode } from '../core/types'
 import { SeismicGraph } from './SeismicGraph'
-import { SpSeismograph } from './SeisplotjsElements'
+import type { RaspTraceWidget, TraceFlag } from '../core/SpectrogramWidget'
 import { DEFAULT_ICONS, DownloadButton, type IconSet } from './icons'
 
-export type StreamViewMode = ViewMode | 'seisplotjs'
+export type StreamViewMode = ViewMode
 
 const VIEW_MODES: { name: StreamViewMode; title: string }[] = [
   { name: 'dual', title: 'Dual (waveform + spectrogram)' },
   { name: 'waveform', title: 'Waveform' },
   { name: 'spectrogram', title: 'Spectrogram' },
-  { name: 'seisplotjs', title: 'seisplotjs seismograph (old view)' },
 ]
 
 const S = {
   bar: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: 8, borderBottom: '1px solid #e2e8f0', fontSize: 12, fontFamily: 'system-ui, sans-serif' },
   group: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 },
-  btn: (active: boolean): CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #cbd5e1', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: active ? '#0284c7' : 'transparent', color: active ? '#fff' : 'inherit' }),
+  btn: (active: boolean): CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #cbd5e1', borderRadius: 6, padding: '6px 8px', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: active ? '#0284c7' : 'transparent', color: active ? '#fff' : 'inherit' }),
   row: { padding: '6px 8px', borderBottom: '1px solid #e2e8f0' },
   empty: { padding: 16, color: '#64748b', fontSize: 13, fontFamily: 'system-ui, sans-serif' },
 } satisfies Record<string, CSSProperties | ((a: boolean) => CSSProperties)>
@@ -65,6 +64,17 @@ export interface SeismicStreamProps {
   icons?: IconSet
   /** extra content at the right of the toolbar */
   toolbarExtra?: ReactNode
+  /**
+   * each channel's widget, e.g. for live data: hydrate it, then push packets with widget.addSamples.
+   * Channels listed in `streams` without samples are still drawn when this is given. Return a cleanup.
+   */
+  onReady?: (channel: string, widget: RaspTraceWidget) => void | (() => void)
+  /** flags for all channels; each graph shows those whose channel_code is its channel */
+  flags?: TraceFlag[]
+  flagEditable?: boolean
+  onFlagAdd?: (ms: number, channel: string) => void
+  onFlagMove?: (id: string, ms: number) => void
+  onFlagRemove?: (id: string) => void
   className?: string
   style?: CSSProperties
 }
@@ -73,6 +83,7 @@ export interface SeismicStreamProps {
 export function SeismicStream({
   stationId: stationIdProp, streams: streamsProp, mseed, live = false, pWaves, displayHeight, timeMode = 'local', defaultViewMode = 'dual', defaultTheme = 'white',
   defaultYMode = 'offset', defaultChannels, toolbar = true, downloadable = false, icons, toolbarExtra, className, style,
+  onReady, flags, flagEditable = false, onFlagAdd, onFlagMove, onFlagRemove,
 }: SeismicStreamProps) {
   const m = useMseed(streamsProp ? null : mseed)
   const streams = streamsProp ?? m.streams
@@ -116,6 +127,25 @@ export function SeismicStream({
     }
   }, [streams, live])
 
+  // stable per channel: SeismicGraph re-runs onReady whenever its identity changes
+  const readyFor = useMemo(() => {
+    const cache = new Map<string, (w: RaspTraceWidget) => void | (() => void)>()
+    return (channel: string) => {
+      let fn = cache.get(channel)
+      if(!fn) cache.set(channel, fn = (w) => onReady?.(channel, w))
+      return fn
+    }
+  }, [onReady])
+  const flagsFor = useMemo(() => {
+    const byChannel = new Map<string, TraceFlag[]>()
+    for(const f of flags ?? []) {
+      const key = (f.channel_code ?? '').toLowerCase()
+      byChannel.set(key, [...(byChannel.get(key) ?? []), f])
+    }
+    const none: TraceFlag[] = []
+    return (channel: string) => byChannel.get(channel.toLowerCase()) ?? none
+  }, [flags])
+
   if(m.loading) return <div style={S.empty}>Loading miniSEED…</div>
   if(m.error) return <div style={S.empty}>miniSEED error: {m.error.message}</div>
   if(streams.length === 0) return <div style={S.empty}>No streams</div>
@@ -130,13 +160,9 @@ export function SeismicStream({
             {codes.map(c => <button type='button' key={c} style={S.btn(selected.includes(c))} aria-pressed={selected.includes(c)} onClick={() => toggle(c)}>{c}</button>)}
           </div>
           <div style={S.group}>
-            {viewMode !== 'seisplotjs' && (
-              <>
-                <button type='button' style={S.btn(false)} title={theme === 'white' ? 'Light theme - click for dark' : 'Dark theme - click for light'} aria-label='Toggle theme' onClick={() => setTheme(theme === 'white' ? 'dark' : 'white')}>{theme === 'white' ? ic.light : ic.dark}</button>
-                <button type='button' style={S.btn(false)} title='Raw values / offset from mean' onClick={() => setYMode(yMode === 'raw' ? 'offset' : 'raw')}>{yMode === 'raw' ? 'RAW' : 'OFFSET'}</button>
-                <button type='button' style={S.btn(zoom.linkZoom)} title={zoom.linkZoom ? 'Zoom/pan all channels together - click to unlink' : 'Zoom/pan one channel only - click to link'} aria-label='Link zoom and pan across channels' aria-pressed={zoom.linkZoom} onClick={() => zoom.setLinkZoom(!zoom.linkZoom)}>{zoom.linkZoom ? ic.link : ic.unlink}</button>
-              </>
-            )}
+            <button type='button' style={S.btn(false)} title={theme === 'white' ? 'Light theme - click for dark' : 'Dark theme - click for light'} aria-label='Toggle theme' onClick={() => setTheme(theme === 'white' ? 'dark' : 'white')}>{theme === 'white' ? ic.light : ic.dark}</button>
+            <button type='button' style={S.btn(false)} title='Raw values / offset from mean' onClick={() => setYMode(yMode === 'raw' ? 'offset' : 'raw')}>{yMode === 'raw' ? 'RAW' : 'OFFSET'}</button>
+            <button type='button' style={S.btn(zoom.linkZoom)} title={zoom.linkZoom ? 'Zoom/pan all channels together - click to unlink' : 'Zoom/pan one channel only - click to link'} aria-label='Link zoom and pan across channels' aria-pressed={zoom.linkZoom} onClick={() => zoom.setLinkZoom(!zoom.linkZoom)}>{zoom.linkZoom ? ic.link : ic.unlink}</button>
             {downloadable && <DownloadButton streams={streams.filter(s => selected.includes(s.channel) && s.samples.length > 0)} fallbackId={stationId} icon={ic.download} label={null} />}
             {VIEW_MODES.map(m => <button type='button' key={m.name} title={m.title} aria-label={m.title} style={S.btn(viewMode === m.name)} aria-pressed={viewMode === m.name} onClick={() => setViewMode(m.name)}>{ic[m.name]}</button>)}
             {toolbarExtra}
@@ -146,25 +172,21 @@ export function SeismicStream({
       {/* stream order, not click order */}
       {streams.filter(s => selected.includes(s.channel)).map(s => {
         const info = prepared.byChannel[s.channel]
-        if(!info) return <div key={s.channel} style={S.empty}>{s.channel}: no data</div>
+        // live channels (onReady) may start empty: their data is pushed into the widget
+        if(!info && !onReady) return <div key={s.channel} style={S.empty}>{s.channel}: no data</div>
         const markers = s.pWaves ?? pWaves
-        if(viewMode === 'seisplotjs') return (
-          <div key={s.channel} style={S.row}>
-            <SpSeismograph data={s} pWaves={markers} unit={s.unit} channel={s.channel} style={{ height: 180 }} />
-          </div>
-        )
         return (
           <div key={s.channel} style={S.row}>
             <SeismicGraph
               stationId={`${stationId}.${s.channel}`}
               channelCode={s.channel}
               unit={s.unit}
-              samples={s.samples}
+              samples={info ? s.samples : undefined}
               sampleRate={s.sampleRate}
-              endTime={prepared.axisEnd}
-              dataEndTime={info.end}
+              endTime={info ? prepared.axisEnd : undefined}
+              dataEndTime={info?.end}
               displayHeight={displayHeight}
-              timeWindowSec={zoom.zoomOf(s.channel) ?? prepared.diff}
+              timeWindowSec={zoom.zoomOf(s.channel) ?? (info ? prepared.diff : undefined)}
               onTimeWindowChange={zoom.setZoom(s.channel)}
               panOffsetSec={zoom.panOf(s.channel)}
               onPanChange={zoom.setPan(s.channel)}
@@ -173,6 +195,12 @@ export function SeismicStream({
               timeMode={timeMode}
               theme={theme}
               yMode={yMode}
+              onReady={onReady && readyFor(s.channel)}
+              flags={flags && flagsFor(s.channel)}
+              flagEditable={flagEditable}
+              onFlagAdd={onFlagAdd && ((ms) => onFlagAdd(ms, s.channel))}
+              onFlagMove={onFlagMove}
+              onFlagRemove={onFlagRemove}
             />
           </div>
         )

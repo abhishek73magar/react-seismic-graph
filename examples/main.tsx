@@ -1,10 +1,11 @@
 import { StrictMode, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
-  SeismicGraph, SeismicStream, SeismicStations, Helicorder, SpHelicorder, SpSeismograph,
+  SeismicGraph, SeismicStream, SeismicStations, Helicorder,
   fromSeismogram, streamsToMseed3, type SpectrogramWidget, type HelicorderWidget, type StreamData, type StationData, type PWave,
 } from 'react-seismic-graph/react'
 import { sp } from 'react-seismic-graph/seisplotjs'
+import { SpHelicorder, SpSeismograph } from 'react-seismic-graph/react/seisplotjs'
 import { makeTrace } from './synthetic'
 
 const NOW = Date.now()

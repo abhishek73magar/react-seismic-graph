@@ -254,7 +254,34 @@ function MseedExample() {
   )
 }
 
-const EXAMPLES = { historical: HistoricalExample, live: LiveExample, stream: StreamExample, stations: StationsExample, helicorder: HelicorderExample, liveHelicorder: LiveHelicorderExample, heliStream: StreamingHelicorderExample, seisplotjs: SeisplotjsExample, fdsn: FdsnExample, mseed: MseedExample }
+// styling: CSS variables for the toolbar, classNames for your own classes, colors for the canvas (per channel here)
+const CHANNEL_TRACE: Record<string, string> = { HHZ: '#dc2626', HHN: '#16a34a', HHE: '#7c3aed' }
+
+function ThemingExample() {
+  const streams = useMemo(() => streamsOf(60), [])
+  return (
+    <Section title='Styling' text='Toolbar via CSS variables (--rsg-*), extra classes via classNames, canvas colours via colors (a function = per channel).'>
+      <style>{`
+        .brand { --rsg-active-bg: #16a34a; --rsg-btn-radius: 999px; --rsg-btn-border: #bbf7d0; --rsg-toolbar-bg: #f0fdf4; --rsg-row-bg: #fafafa; }
+        .brand .rsg-button:hover { filter: brightness(0.95); }
+        .brand .chip-active { box-shadow: 0 0 0 2px #86efac; }
+      `}</style>
+      <SeismicStream
+        className='brand'
+        classNames={{ buttonActive: 'chip-active' }}
+        stationId='NP.KTM.00'
+        streams={streams}
+        defaultChannels={['HHZ', 'HHN', 'HHE']}
+        defaultViewMode='waveform'
+        displayHeight={260}
+        colors={(channel) => ({ white: { trace: CHANNEL_TRACE[channel], background: '#fafafa' }, dark: { trace: CHANNEL_TRACE[channel] } })}
+        downloadable
+      />
+    </Section>
+  )
+}
+
+const EXAMPLES = { historical: HistoricalExample, live: LiveExample, stream: StreamExample, stations: StationsExample, helicorder: HelicorderExample, liveHelicorder: LiveHelicorderExample, heliStream: StreamingHelicorderExample, seisplotjs: SeisplotjsExample, fdsn: FdsnExample, mseed: MseedExample, theming: ThemingExample }
 type Key = keyof typeof EXAMPLES
 
 function App() {

@@ -4,7 +4,18 @@ import { toMs } from '../core/time'
 import { stationIdOf } from '../core/seismogram'
 import { mseedBytesOf, streamMseed, type MseedInput } from '../mseed'
 import { DownloadButton } from './icons'
+import { part } from './styles'
 import type { PWave, Samples, StreamData, ThemeName } from '../core/types'
+
+
+interface Channel {
+  channel_code: string
+  unit: string
+  gain: number
+  azimuth: number
+  dip: number
+  depth: number
+}
 
 export interface HelicorderProps {
   /** start of the first line; default: data start floored to a whole line, else today 00:00 UTC */
@@ -41,14 +52,37 @@ export interface HelicorderProps {
   onReady?: (widget: HelicorderWidget) => void | (() => void)
   className?: string
   style?: CSSProperties
+  /** shown as a channel picker in the toolbar; the active one is found by matching `channelCode` against `channel_code` */
+  channels?: Channel[]
+  /** fired when a channel button is clicked; receives the full matching entry from `channels` (looked up by channel_code) */
+  onChannelChange?: (channel: Channel) => void
+  /** shows a date picker in the toolbar when set; fired with the picked day as UTC midnight ms */
+  onDateChange?: (ms: string) => void
 }
 
 type Load = { total: number; done: boolean; error: string | null; first: StreamData | null; download: StreamData | null }
 
 /** canvas helicorder: the day (or any range) folded into lines; static samples, or chunks streamed in */
 export function Helicorder({
-  startTime: startProp, numLines: linesProp, lineDurationSec = 3600, mseed, stream, channelCode, samples, sampleRate = 100,
-  dataStartTime, height, theme = 'white', colors, timeMode = 'local', gain = 1, clip = true, title: titleProp,
+  startTime: startProp, 
+  numLines: linesProp, 
+  lineDurationSec = 3600, 
+  mseed, 
+  stream, 
+  channelCode, 
+  samples, 
+  sampleRate = 100,
+  dataStartTime, 
+  height, 
+  theme = 'white', 
+  colors, 
+  timeMode = 'local', 
+  gain = 1, 
+  clip = true, 
+  title: titleProp,
+  channels,
+  onChannelChange,
+  onDateChange,
   pWaves, onClick, downloadable = false, onReady, className, style,
 }: HelicorderProps) {
   const streaming = !!(stream || mseed)
@@ -128,12 +162,74 @@ export function Helicorder({
     : load && !load.done ? `Loading… ${load.total.toLocaleString()} samples`
     : null
 
+  // channel buttons: active one found by matching channelCode against each entry's channel_code
+  const pickChannel = (code: string) => {
+    const match = channels?.find(c => c.channel_code === code)
+    if(match) onChannelChange?.(match)
+  }
+
+  // yyyy-mm-dd (UTC) for <input type="date">; onDateChange gets that day's UTC midnight back
+  const dateValue = startMs !== undefined ? new Date(startMs).toISOString().slice(0, 10) : ''
+  const handleDateChange = (value: string) => {
+    if(!value) return
+    onDateChange?.(value)
+  }
+
   return (
     <div className={className} style={style}>
-      {(downloadable || status) && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 4, fontSize: 12, fontFamily: 'system-ui, sans-serif', color: load?.error ? '#dc2626' : '#64748b' }}>
-          {status && <span role='status'>{status}</span>}
-          {downloadable && <DownloadButton streams={download} fallbackId={title || undefined} />}
+      {(channels?.length || onDateChange || downloadable || status) && (
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 8,
+          fontSize: 12,
+          fontFamily: 'system-ui, sans-serif',
+          padding: '4px 8px',
+        }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+            {!!channels?.length && (
+              <>
+                <span style={{ fontWeight: 'bold', marginRight: 4 }}>Channels:</span>
+                {channels.map(c => {
+                  const active = c.channel_code === channelCode
+                  const { className: btnClass, style: btnStyle } = part('button', undefined, false, active)
+                  return (
+                    <button type='button' key={c.channel_code} className={btnClass} style={btnStyle} data-channel={c.channel_code}
+                      aria-pressed={active} onClick={() => pickChannel(c.channel_code)}>
+                      {c.channel_code}
+                    </button>
+                  )
+                })}
+              </>
+            )}
+            {onDateChange && (
+              <div style={{ paddingInline: "4px" }}>
+              <input 
+                type='date' 
+                value={dateValue} 
+                onChange={e => handleDateChange(e.target.value)} 
+                aria-label='Select date'
+                style={part('button', undefined, false).style} 
+              />
+              (UTC)
+              </div>
+            )}
+            
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              gap: 8,
+              color: load?.error ? '#dc2626' : '#64748b',
+            }}
+          >
+            {status && <span role='status'>{status}</span>}
+            {downloadable && <DownloadButton streams={download} fallbackId={title || undefined} />}
+          </div>
         </div>
       )}
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%' }} />

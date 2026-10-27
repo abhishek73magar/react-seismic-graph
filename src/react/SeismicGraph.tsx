@@ -134,6 +134,11 @@ export function SeismicGraph({
   useEffect(() => { widget?.setTimeWindow(timeWindowSec) }, [widget, timeWindowSec])
   useEffect(() => { if(panOffsetSec !== undefined) widget?.setPanOffset(panOffsetSec) }, [widget, panOffsetSec])
   useEffect(() => { widget?.setTheme(theme) }, [widget, theme])
+  // by value: callers often pass a fresh inline object each render
+  const colorsKey = JSON.stringify(colors ?? null)
+  const fontsKey = JSON.stringify(fonts ?? null)
+  useEffect(() => { widget?.setPalette(JSON.parse(colorsKey) ?? undefined) }, [widget, colorsKey])
+  useEffect(() => { widget?.setFonts(JSON.parse(fontsKey) ?? undefined) }, [widget, fontsKey])
   useEffect(() => { widget?.setChannel(channelCode) }, [widget, channelCode])
   useEffect(() => { widget?.setUnit(unit) }, [widget, unit])
   useEffect(() => { widget?.setYMode(yMode) }, [widget, yMode])

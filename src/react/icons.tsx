@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { STYLES } from './styles'
 import { downloadMseed } from '../mseed'
 import type { StreamData } from '../core/types'
 
@@ -13,6 +14,8 @@ const PATHS = {
   link: 'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z',
   download: 'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z',
   unlink: 'M17 7h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1 0 1.43-.98 2.63-2.31 2.98l1.46 1.46C20.88 15.61 22 13.95 22 12c0-2.76-2.24-5-5-5zm-1 4h-2.19l2 2H16zM2 4.27l3.11 3.11C3.29 8.12 2 9.91 2 12c0 2.76 2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1 0-1.59 1.21-2.9 2.76-3.07L8.73 11H8v2h2.73L13 15.27V17h1.73l4.01 4L20 19.74 3.27 3 2 4.27z',
+  realtime: 'M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z',
+  close: 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
 }
 
 export type IconName = keyof typeof PATHS
@@ -29,17 +32,18 @@ export const DEFAULT_ICONS = Object.fromEntries(
   (Object.keys(PATHS) as IconName[]).map(name => [name, <Icon key={name} name={name} />]),
 ) as Record<IconName, ReactNode>
 
-const btnStyle: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #cbd5e1', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: 'transparent', color: 'inherit' }
-
 /** saves each stream as NET.STA.LOC.CHA.mseed; disabled while there is nothing to save */
-export function DownloadButton({ streams, fallbackId, icon, label = 'mseed', style }: { streams: StreamData[]; fallbackId?: string; icon?: ReactNode; label?: ReactNode; style?: CSSProperties }) {
+export function DownloadButton({ streams, fallbackId, icon, className = 'rsg-button', style = STYLES.button }: {
+  streams: StreamData[]; fallbackId?: string; icon?: ReactNode; className?: string; style?: CSSProperties
+}) {
   const disabled = streams.length === 0
   const title = disabled ? 'No data to download' : `Download ${streams.length > 1 ? `${streams.length} channels` : 'channel'} as miniSEED`
   // one file per channel; spaced out so the browser doesn't drop the extra downloads
   const save = () => streams.forEach((s, i) => setTimeout(() => downloadMseed(s, fallbackId), i * 300))
   return (
-    <button type='button' title={title} aria-label={title} disabled={disabled} onClick={save} style={{ ...btnStyle, opacity: disabled ? 0.5 : 1, cursor: disabled ? 'not-allowed' : 'pointer', ...style }}>
-      {icon ?? <Icon name='download' />}{label}
+    <button type='button' title={title} aria-label={title} disabled={disabled} onClick={save} className={className}
+      style={style && { ...style, opacity: disabled ? 0.5 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}>
+      {icon ?? <Icon name='download' />}
     </button>
   )
 }

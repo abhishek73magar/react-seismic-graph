@@ -7,6 +7,8 @@ import type { PWave, StationData, StreamData, ThemeName, ViewMode, YMode } from 
 import { SeismicGraph } from './SeismicGraph'
 import type { RaspTraceWidget, TraceFlag } from '../core/SpectrogramWidget'
 import { DEFAULT_ICONS, DownloadButton, type IconSet } from './icons'
+import { part, type ClassNames } from './styles'
+import type { SeismicGraphProps } from './SeismicGraph'
 
 export type StreamViewMode = ViewMode
 
@@ -15,14 +17,6 @@ const VIEW_MODES: { name: StreamViewMode; title: string }[] = [
   { name: 'waveform', title: 'Waveform' },
   { name: 'spectrogram', title: 'Spectrogram' },
 ]
-
-const S = {
-  bar: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: 8, borderBottom: '1px solid #e2e8f0', fontSize: 12, fontFamily: 'system-ui, sans-serif' },
-  group: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 },
-  btn: (active: boolean): CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #cbd5e1', borderRadius: 6, padding: '6px 8px', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: active ? '#0284c7' : 'transparent', color: active ? '#fff' : 'inherit' }),
-  row: { padding: '6px 8px', borderBottom: '1px solid #e2e8f0' },
-  empty: { padding: 16, color: '#64748b', fontSize: 13, fontFamily: 'system-ui, sans-serif' },
-} satisfies Record<string, CSSProperties | ((a: boolean) => CSSProperties)>
 
 const REALTIME_LEFT_MARGIN_SEC = 5 // realtime: seconds of buffered data kept hidden past the left edge
 
@@ -64,6 +58,13 @@ export interface SeismicStreamProps {
   icons?: IconSet
   /** extra content at the right of the toolbar */
   toolbarExtra?: ReactNode
+  /** extra classes per part (root, toolbar, group, label, button, buttonActive, row, empty); rsg-* classes are always set */
+  classNames?: ClassNames
+  /** drop the built-in inline styles (style it all with classNames / your CSS) */
+  unstyled?: boolean
+  /** canvas colours (trace, background, grid ...), per theme; a function gives each channel its own */
+  colors?: SeismicGraphProps['colors'] | ((channel: string) => SeismicGraphProps['colors'])
+  fonts?: SeismicGraphProps['fonts']
   /**
    * each channel's widget, e.g. for live data: hydrate it, then push packets with widget.addSamples.
    * Channels listed in `streams` without samples are still drawn when this is given. Return a cleanup.
@@ -75,6 +76,11 @@ export interface SeismicStreamProps {
   onFlagAdd?: (ms: number, channel: string) => void
   onFlagMove?: (id: string, ms: number) => void
   onFlagRemove?: (id: string) => void
+  /** shows a realtime enable/disable toggle in the toolbar; shown only when both are given. Each returns the resulting enabled state */
+  onRealtimeEnable?: () => boolean
+  onRealtimeDisable?: () => boolean
+  /** shows a close button in the toolbar when given */
+  onClose?: () => void
   className?: string
   style?: CSSProperties
 }
@@ -83,7 +89,8 @@ export interface SeismicStreamProps {
 export function SeismicStream({
   stationId: stationIdProp, streams: streamsProp, mseed, live = false, pWaves, displayHeight, timeMode = 'local', defaultViewMode = 'dual', defaultTheme = 'white',
   defaultYMode = 'offset', defaultChannels, toolbar = true, downloadable = false, icons, toolbarExtra, className, style,
-  onReady, flags, flagEditable = false, onFlagAdd, onFlagMove, onFlagRemove,
+  classNames, unstyled = false, colors, fonts, onReady, flags, flagEditable = false, onFlagAdd, onFlagMove, onFlagRemove,
+  onRealtimeEnable, onRealtimeDisable, onClose,
 }: SeismicStreamProps) {
   const m = useMseed(streamsProp ? null : mseed)
   const streams = streamsProp ?? m.streams
@@ -100,9 +107,16 @@ export function SeismicStream({
   const [yMode, setYMode] = useState<YMode>(defaultYMode)
   const zoom = useLinkedZoom()
   const ic = { ...DEFAULT_ICONS, ...icons }
+  const p = (name: Parameters<typeof part>[0], active = false) => part(name, classNames, unstyled, active)
+
+  // realtime toggle: shown only when both callbacks are given; each reports back the state it actually ended up in
+  const canToggleRealtime = !!(onRealtimeEnable && onRealtimeDisable)
+  const [realtimeOn, setRealtimeOn] = useState(live)
+  const toggleRealtime = () => setRealtimeOn((realtimeOn ? onRealtimeDisable : onRealtimeEnable)?.() ?? realtimeOn)
 
   // 'All' on = every channel, off = back to the first one; the last selected channel can't be turned off
   const toggle = (name: string) => {
+    if(codes.length < 1) return;
     if(name === '*') return setPicked(allSelected ? codes.slice(0, 1) : codes)
     if(!selected.includes(name)) return setPicked([...selected, name])
     if(selected.length > 1) setPicked(selected.filter(c => c !== name))
@@ -146,26 +160,31 @@ export function SeismicStream({
     return (channel: string) => byChannel.get(channel.toLowerCase()) ?? none
   }, [flags])
 
-  if(m.loading) return <div style={S.empty}>Loading miniSEED…</div>
-  if(m.error) return <div style={S.empty}>miniSEED error: {m.error.message}</div>
-  if(streams.length === 0) return <div style={S.empty}>No streams</div>
+  const totalChannel = useMemo(() => streams.length, [streams])
 
+  if(m.loading) return <div {...p('empty')}>Loading miniSEED…</div>
+  if(m.error) return <div {...p('empty')}>miniSEED error: {m.error.message}</div>
+  if(streams.length === 0) return <div {...p('empty')}>No streams</div>
+
+  const root = p('root')
   return (
-    <div className={className} style={style}>
+    <div className={[root.className, className].filter(Boolean).join(' ')} style={{ ...root.style, ...style }}>
       {toolbar && (
-        <div style={S.bar}>
-          <div style={S.group}>
-            <b style={{ marginRight: 4 }}>Channels:</b>
-            <button type='button' style={S.btn(allSelected)} aria-pressed={allSelected} onClick={() => toggle('*')}>All</button>
-            {codes.map(c => <button type='button' key={c} style={S.btn(selected.includes(c))} aria-pressed={selected.includes(c)} onClick={() => toggle(c)}>{c}</button>)}
+        <div {...p('toolbar')}>
+          <div {...p('group')}>
+            <span {...p('label')}>Channel{totalChannel > 1 ? 's' : ''}:</span>
+            {totalChannel > 1 &&<button type='button' {...p('button', allSelected)} aria-pressed={allSelected} onClick={() => toggle('*')}>All</button>}
+            {codes.map(c => <button type='button' key={c} {...p('button', selected.includes(c))} data-channel={c} aria-pressed={selected.includes(c)} onClick={() => toggle(c)}>{c}</button>)}
           </div>
-          <div style={S.group}>
-            <button type='button' style={S.btn(false)} title={theme === 'white' ? 'Light theme - click for dark' : 'Dark theme - click for light'} aria-label='Toggle theme' onClick={() => setTheme(theme === 'white' ? 'dark' : 'white')}>{theme === 'white' ? ic.light : ic.dark}</button>
-            <button type='button' style={S.btn(false)} title='Raw values / offset from mean' onClick={() => setYMode(yMode === 'raw' ? 'offset' : 'raw')}>{yMode === 'raw' ? 'RAW' : 'OFFSET'}</button>
-            <button type='button' style={S.btn(zoom.linkZoom)} title={zoom.linkZoom ? 'Zoom/pan all channels together - click to unlink' : 'Zoom/pan one channel only - click to link'} aria-label='Link zoom and pan across channels' aria-pressed={zoom.linkZoom} onClick={() => zoom.setLinkZoom(!zoom.linkZoom)}>{zoom.linkZoom ? ic.link : ic.unlink}</button>
-            {downloadable && <DownloadButton streams={streams.filter(s => selected.includes(s.channel) && s.samples.length > 0)} fallbackId={stationId} icon={ic.download} label={null} />}
-            {VIEW_MODES.map(m => <button type='button' key={m.name} title={m.title} aria-label={m.title} style={S.btn(viewMode === m.name)} aria-pressed={viewMode === m.name} onClick={() => setViewMode(m.name)}>{ic[m.name]}</button>)}
+          <div {...p('group')}>
+            <button type='button' {...p('button')} title={theme === 'white' ? 'Light theme - click for dark' : 'Dark theme - click for light'} aria-label='Toggle theme' onClick={() => setTheme(theme === 'white' ? 'dark' : 'white')}>{theme === 'white' ? ic.light : ic.dark}</button>
+            <button type='button' {...p('button')} title='Raw values / offset from mean' onClick={() => setYMode(yMode === 'raw' ? 'offset' : 'raw')}>{yMode === 'raw' ? 'RAW' : 'OFFSET'}</button>
+            <button type='button' {...p('button', zoom.linkZoom)} title={zoom.linkZoom ? 'Zoom/pan all channels together - click to unlink' : 'Zoom/pan one channel only - click to link'} aria-label='Link zoom and pan across channels' aria-pressed={zoom.linkZoom} onClick={() => zoom.setLinkZoom(!zoom.linkZoom)}>{zoom.linkZoom ? ic.link : ic.unlink}</button>
+            {downloadable && <DownloadButton streams={streams.filter(s => selected.includes(s.channel) && s.samples.length > 0)} fallbackId={stationId} icon={ic.download} {...p('button')} />}
+            {VIEW_MODES.map(m => <button type='button' key={m.name} title={m.title} aria-label={m.title} {...p('button', viewMode === m.name)} aria-pressed={viewMode === m.name} onClick={() => setViewMode(m.name)}>{ic[m.name]}</button>)}
+            {canToggleRealtime && <button type='button' {...p('button', realtimeOn)} title={realtimeOn ? 'Realtime enabled - click to disable' : 'Realtime disabled - click to enable'} aria-label='Toggle realtime' aria-pressed={realtimeOn} onClick={toggleRealtime}>{ic.realtime}</button>}
             {toolbarExtra}
+            {onClose && <button type='button' {...p('button')} title='Close' aria-label='Close' onClick={onClose}>{ic.close}</button>}
           </div>
         </div>
       )}
@@ -173,10 +192,10 @@ export function SeismicStream({
       {streams.filter(s => selected.includes(s.channel)).map(s => {
         const info = prepared.byChannel[s.channel]
         // live channels (onReady) may start empty: their data is pushed into the widget
-        if(!info && !onReady) return <div key={s.channel} style={S.empty}>{s.channel}: no data</div>
+        if(!info && !onReady) return <div key={s.channel} {...p('empty')}>{s.channel}: no data</div>
         const markers = s.pWaves ?? pWaves
         return (
-          <div key={s.channel} style={S.row}>
+          <div key={s.channel} {...p('row')} data-channel={s.channel}>
             <SeismicGraph
               stationId={`${stationId}.${s.channel}`}
               channelCode={s.channel}
@@ -195,6 +214,8 @@ export function SeismicStream({
               timeMode={timeMode}
               theme={theme}
               yMode={yMode}
+              colors={typeof colors === 'function' ? colors(s.channel) : colors}
+              fonts={fonts}
               onReady={onReady && readyFor(s.channel)}
               flags={flags && flagsFor(s.channel)}
               flagEditable={flagEditable}
@@ -219,14 +240,15 @@ export interface SeismicStationsProps extends Omit<SeismicStreamProps, 'stationI
 export function SeismicStations({ stations: stationsProp, mseed, ...rest }: SeismicStationsProps) {
   const m = useMseed(stationsProp ? null : mseed)
   const stations = useMemo(() => stationsProp ?? groupStations(m.streams), [stationsProp, m.streams])
-  if(m.loading) return <div style={S.empty}>Loading miniSEED…</div>
-  if(m.error) return <div style={S.empty}>miniSEED error: {m.error.message}</div>
-  if(stations.length === 0) return <div style={S.empty}>No stations</div>
+  const p = (name: 'empty' | 'station' | 'stationHeader') => part(name, rest.classNames, !!rest.unstyled)
+  if(m.loading) return <div {...p('empty')}>Loading miniSEED…</div>
+  if(m.error) return <div {...p('empty')}>miniSEED error: {m.error.message}</div>
+  if(stations.length === 0) return <div {...p('empty')}>No stations</div>
   return (
     <>
       {stations.map(st => (
-        <section key={st.id} style={{ border: '1px solid #e2e8f0', marginBottom: 12 }}>
-          <header style={{ padding: '8px 12px', background: '#f1f5f9', fontWeight: 700, fontSize: 14, fontFamily: 'system-ui, sans-serif' }}>{st.title ?? st.id}</header>
+        <section key={st.id} {...p('station')} data-station={st.id}>
+          <header {...p('stationHeader')}>{st.title ?? st.id}</header>
           <SeismicStream stationId={st.id} streams={st.streams} {...rest} />
         </section>
       ))}

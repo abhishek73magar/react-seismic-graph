@@ -375,11 +375,9 @@ class RaspTraceWidget {
 
         this.viewMode = options.viewMode || 'dual'; // dual view by default: dual | waveform | spectrogram
         this.theme = options.theme || 'white';
-        // resolved once here; render code only reads this.colors / this.fonts
-        this.palette = {
-            white: { ...DEFAULT_COLORS.shared, ...DEFAULT_COLORS.white, ...(options.colors?.white || {}) },
-            dark: { ...DEFAULT_COLORS.shared, ...DEFAULT_COLORS.dark, ...(options.colors?.dark || {}) },
-        };
+        // resolved here; render code only reads this.colors / this.fonts
+        this.palette = { white: DEFAULT_COLORS.white as Palette, dark: DEFAULT_COLORS.dark as Palette };
+        this.setPalette(options.colors);
         this.fonts = { ...DEFAULT_FONTS, ...(options.fonts || {}) };
         this.timeMode = options.timeMode || 'local';
         if(this.timeMode === 'local') this.timeMode = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -499,6 +497,18 @@ class RaspTraceWidget {
     /** current theme's colours ('white' -> white palette, anything else -> dark) */
     get colors() {
         return this.theme === 'white' ? this.palette.white : this.palette.dark;
+    }
+
+    /** replace all colour overrides (defaults + these); unlike setColors, keys left out go back to the default */
+    setPalette(colors: RaspTraceWidgetOptions['colors'] = {}) {
+        this.palette = {
+            white: { ...DEFAULT_COLORS.shared, ...DEFAULT_COLORS.white, ...(colors?.white || {}) },
+            dark: { ...DEFAULT_COLORS.shared, ...DEFAULT_COLORS.dark, ...(colors?.dark || {}) },
+        };
+    }
+
+    setFonts(fonts: Partial<Fonts> = {}) {
+        this.fonts = { ...DEFAULT_FONTS, ...fonts };
     }
 
     /** override colours at runtime, e.g. setColors('white', { text: '#111' }) */

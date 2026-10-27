@@ -154,6 +154,18 @@ const onReady = useCallback((widget) => {
 
 **Flags.** Set `flags`, `flagEditable`, `onFlagAdd`, `onFlagMove` and `onFlagRemove`. Click to add a flag, drag to move it, right-click to remove it.
 
+**Colors.** The canvas (trace, grid, background, tooltips, ...) can't be styled with CSS, so pass `colors` / `fonts` instead. Both are per theme (`white` / `dark`), and any key you leave out keeps its default from `DEFAULT_COLORS` / `DEFAULT_FONTS` in `src/core/SpectrogramWidget.ts` — so a client that sends nothing gets the built-in look, and one that sends a partial palette only overrides what it specifies:
+
+```tsx
+<SeismicGraph
+  colors={{ white: { trace: '#16a34a', background: '#fafafa' }, dark: { trace: '#22d3ee' } }}
+  fonts={{ label: '11px monospace' }}
+  ...
+/>
+```
+
+Both props are reactive: passing a new object re-applies the palette/fonts on the live widget (via `widget.setPalette()` / `widget.setFonts()`) without rebuilding it. Imperatively: `widget.setPalette({ white: { trace: '#16a34a' } })`, `widget.setFonts({ label: '11px monospace' })`, or `widget.setColors('dark', { trace: '#0f0' })` to tweak just one theme at a time.
+
 ### `SeismicStream`: all channels of one station
 
 ```tsx
@@ -191,9 +203,45 @@ The toolbar uses built-in Material icons drawn as inline SVG, so no icon library
 import { FaMoon, FaSun } from 'react-icons/fa'
 
 <SeismicStream icons={{ light: <FaSun />, dark: <FaMoon /> }} ... />
-// names: dual, waveform, spectrogram, light, dark, link, unlink, download
+// names: dual, waveform, spectrogram, light, dark, link, unlink, download, realtime, close
 // the built-in ones are exported too: <Icon name="spectrogram" size={20} />
 ```
+
+**Realtime toggle and close button.** Both are opt-in and controlled by the parent — the component never starts/stops a feed or closes itself on its own:
+
+```tsx
+<SeismicStream
+  // shown only when both are given; each returns the state it actually ended up in (true = enabled)
+  onRealtimeEnable={() => { startFeed(); return true }}
+  onRealtimeDisable={() => { stopFeed(); return false }}
+  onClose={() => setVisible(false)}   // shows a close (X) button; omit the prop to hide it
+  ...
+/>
+```
+
+**Styling.** `colors` and `fonts` are forwarded to every channel's `SeismicGraph` (canvas colours, see above); `colors` can also be a function so each channel gets its own palette:
+
+```tsx
+<SeismicStream colors={(channel) => ({ white: { trace: CHANNEL_COLOR[channel] } })} ... />
+```
+
+The toolbar (channel picker, theme/offset/link/view buttons, rows, station headers) is a separate concern from canvas colours, and can be restyled three ways, without touching the component:
+
+1. **CSS variables** — no props needed, just a class on an ancestor (or `className` on `SeismicStream`/`SeismicStations`):
+   ```css
+   .brand { --rsg-active-bg: #16a34a; --rsg-btn-radius: 999px; --rsg-toolbar-bg: #f0fdf4; --rsg-row-bg: #fafafa; }
+   ```
+2. **`classNames`** — add your own class per part, on top of the fixed `rsg-*` classes (`rsg-root`, `rsg-toolbar`, `rsg-button`, `rsg-button[aria-pressed="true"]`, `rsg-row`, ...):
+   ```tsx
+   <SeismicStream classNames={{ buttonActive: 'chip-active', row: 'my-row' }} ... />
+   ```
+   Parts: `root`, `toolbar`, `group`, `label`, `button`, `buttonActive`, `row`, `empty`, `station`, `stationHeader`.
+3. **`unstyled`** — drops every built-in inline style (the `rsg-*` classes are still applied), so you style everything yourself, e.g. with Tailwind:
+   ```tsx
+   <SeismicStream unstyled classNames={{ toolbar: 'flex justify-between p-2' }} ... />
+   ```
+
+`STYLES` and the `ClassNames`/`StylePart` types are exported from `react-seismic-graph/react` if you want to read or reuse the defaults.
 
 ### `SeismicStations`: several stations
 
@@ -240,6 +288,21 @@ import { Helicorder } from 'react-seismic-graph/react'
 - Missing data is stored as `NaN` and drawn as a gap.
 - Each line has its own mean removed.
 - One large event does not flatten the rest of the day, because the scale comes from the median line.
+
+**Channel picker and date select.** Pass `channels` to show a channel button per entry in the toolbar heading; the active one is found by matching `channelCode` against each entry's `channel_code`. Pass `onDateChange` to also show a date input. Neither prop changes `channelCode` / `startTime` itself — the component is controlled, so you re-render with the new value:
+
+```tsx
+<Helicorder
+  channelCode={channelCode}
+  channels={[
+    { channel_code: 'HHZ', unit: 'm/s', gain: 1, azimuth: 0, dip: -90, depth: 0 },
+    { channel_code: 'HHN', unit: 'm/s', gain: 1, azimuth: 0, dip: 0, depth: 0 },
+  ]}
+  onChannelChange={(channel) => setChannelCode(channel.channel_code)} // full Channel info, not just the code
+  startTime={day}
+  onDateChange={(ms) => setDay(ms)}                                  // UTC midnight of the picked day
+/>
+```
 
 **Streamed history.** If historical data arrives in pieces, for example a paged API, a socket replay or a large miniSEED download, pass it as `stream`. Each piece is plotted at its own time as it lands:
 

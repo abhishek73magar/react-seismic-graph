@@ -2,6 +2,8 @@
 
 Seismic plotting for the browser: a **waveform + spectrogram** canvas (Raspberry Shake DataView style), a **canvas helicorder**, and thin wrappers around **seisplotjs** (`<sp-helicorder>`, `<sp-seismograph>`). Use it from React or from plain HTML/JS.
 
+**Live examples:** https://abhishek73magar.github.io/react-seismic-graph/ ([plain HTML version](https://abhishek73magar.github.io/react-seismic-graph/vanilla.html))
+
 Extracted from the AlertNepal web app (`alertnepal_web_v3`, `components/Seismic`).
 
 | Entry | What | Needs |
@@ -328,7 +330,8 @@ The full key lists are exported as `DEFAULT_COLORS` / `DEFAULT_FONTS` (spectrogr
 
 ```bash
 pnpm i
-pnpm dev        # http://localhost:5173: React examples + /vanilla.html
+pnpm dev        # http://localhost:7000: React examples + /vanilla.html
+pnpm build:examples   # static site in site/, deployed to GitHub Pages on every push to main
 ```
 
 | Example | Shows |

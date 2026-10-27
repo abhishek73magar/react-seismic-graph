@@ -5,13 +5,19 @@ import react from '@vitejs/plugin-react'
 const r = (p: string) => resolve(import.meta.dirname, p)
 
 export default defineConfig(({ command, mode }) => {
-  // `pnpm dev`: example app, package imported straight from src
-  if(command === 'serve') return {
+  // `pnpm dev` / `vite build --mode examples` (GitHub Pages): example app, package imported straight from src
+  if(command === 'serve' || mode === 'examples') return {
     root: r('examples'),
+    base: './', // relative asset paths: works under /react-seismic-graph/ on GitHub Pages
     plugins: [react()],
     server: {
       port: 7000,
       host: true,
+    },
+    build: {
+      outDir: r('site'),
+      emptyOutDir: true,
+      rollupOptions: { input: { index: r('examples/index.html'), vanilla: r('examples/vanilla.html') } },
     },
     resolve: {
       alias: [

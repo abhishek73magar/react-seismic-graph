@@ -7,7 +7,7 @@
     "type": "git",
     "url": "git+https://github.com/abhishek73magar/react-seismic-graph.git"
   },
-  "homepage": "https://github.com/abhishek73magar/react-seismic-graph#readme",
+  "homepage": "https://abhishek73magar.github.io/react-seismic-graph/",
   "bugs": {
     "url": "https://github.com/abhishek73magar/react-seismic-graph/issues"
   },
@@ -45,7 +45,8 @@
     "test": "node --import ./test/register.mjs test/core.test.ts && node --import ./test/register.mjs test/mseed.test.ts",
     "prepublishOnly": "pnpm test && pnpm typecheck && pnpm build",
     "release": "npm publish --access public",
-    "release:dry": "npm publish --dry-run"
+    "release:dry": "npm publish --dry-run",
+    "build:examples": "vite build --mode examples"
   },
   "keywords": [
     "seismology",

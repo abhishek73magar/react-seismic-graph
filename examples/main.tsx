@@ -1,12 +1,11 @@
 import { StrictMode, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
-  SeismicGraph, SeismicStream, SeismicStations, Helicorder,
-  fromSeismogram, streamsToMseed3, type SpectrogramWidget, type HelicorderWidget, type StreamData, type StationData, type PWave,
+  SeismicGraph, SeismicStream, SeismicStations, Helicorder, ZoomSync,
+  streamsToMseed3, type SpectrogramWidget, type HelicorderWidget, type StreamData, type StationData, type PWave,
 } from 'react-seismic-graph/react'
-import { sp } from 'react-seismic-graph/seisplotjs'
-import { SpHelicorder, SpSeismograph } from 'react-seismic-graph/react/seisplotjs'
 import { makeTrace } from './synthetic'
+import { CODE } from './snippets'
 
 const NOW = Date.now()
 const SR = 100
@@ -76,7 +75,7 @@ function LiveExample() {
 function StreamExample() {
   const streams = useMemo(() => streamsOf(10), [])
   return (
-    <Section title='SeismicStream: channels of one station' text='Pick channels, switch dual/waveform/spectrogram/seisplotjs, link zoom across channels.'>
+    <Section title='SeismicStream: channels of one station' text='Pick channels, switch dual/waveform/spectrogram, link zoom across channels.'>
       <SeismicStream stationId='NP.KTM.00' streams={streams} pWaves={PWAVES} displayHeight={360} defaultChannels={['HHZ', 'HHE']} downloadable />
     </Section>
   )
@@ -89,8 +88,26 @@ function StationsExample() {
     { id: 'NP.PKR.00', title: 'PKR - Pokhara', streams: streamsOf(30) },
   ], [])
   return (
-    <Section title='SeismicStations: station wise' text='One titled SeismicStream per station.'>
+    <Section title='SeismicStations: station wise' text='One titled SeismicStream per station. Turn on the sync button (↻) in two toolbars: zooming one station zooms the other.'>
       <SeismicStations stations={stations} pWaves={PWAVES} displayHeight={300} defaultViewMode='waveform' />
+    </Section>
+  )
+}
+
+// 4b. zoom sync across stations: <ZoomSync> around any SeismicStreams (SeismicStations has one built in).
+// Sync is per station (toolbar ↻ button): joining jumps to the shared view, then all synced stations zoom/pan together,
+// lined up on UTC time even when their data ends at different times. Channel link inside a station works as before.
+function ZoomSyncExample() {
+  const ktm = useMemo(() => streamsOf(70), [])
+  const pkr = useMemo(() => streamsOf(80, NOW - 540_000), []) // starts 1 min later
+  const brt = useMemo(() => streamsOf(90).map(s => ({ ...s, samples: Array.prototype.slice.call(s.samples, 0, -30 * SR) })), []) // ends 30 s earlier
+  return (
+    <Section title='Zoom sync across stations' text='KTM and PKR start synced (defaultSynced): wheel-zoom or drag either one. BRT is not: zoom it, then press its ↻ button to snap it to the shared view. Double-click resets the shared view.'>
+      <ZoomSync>
+        <SeismicStream stationId='NP.KTM.00' streams={ktm} pWaves={PWAVES} displayHeight={220} defaultViewMode='waveform' defaultSynced />
+        <SeismicStream stationId='NP.PKR.00' streams={pkr} pWaves={PWAVES} displayHeight={220} defaultViewMode='waveform' defaultSynced />
+        <SeismicStream stationId='NP.BRT.00' streams={brt} pWaves={PWAVES} displayHeight={220} defaultViewMode='waveform' />
+      </ZoomSync>
     </Section>
   )
 }
@@ -179,44 +196,6 @@ function StreamingHelicorderExample() {
     <Section title='Helicorder: streamed history' text='1 h at 100 sps arriving as 60 one-minute pages. stream={() => asyncIterable}; range and title come from the first chunk, lines grow as pages land.'>
       <button onClick={() => setRun(r => r + 1)}>reload</button>
       <Helicorder stream={stream} lineDurationSec={60} timeMode='UTC' height={640} pWaves={HELI_PWAVES} downloadable />
-      <SpHelicorder stream={stream} start={start} end={start + 3_600_000} lineDurationSec={60} timeZone='UTC' style={{ marginTop: 16 }} />
-    </Section>
-  )
-}
-
-// 7. seisplotjs web components
-function SeisplotjsExample() {
-  const heli = useHeliControls()
-  const stream: StreamData = useMemo(() => ({ channel: 'HHZ', unit: 'm/s', sampleRate: HELI_SR, startTime: HELI_START, samples: heliSamples() }), [])
-  const recent: StreamData = useMemo(() => streamsOf(40)[0], [])
-  const [clicked, setClicked] = useState('')
-  return (
-    <Section title='seisplotjs: SpHelicorder + SpSeismograph' text='Wrappers around <sp-helicorder> / <sp-seismograph>. Default: last 1 h in 1-minute lines.'>
-      {heli.controls}
-      <SpHelicorder data={stream} start={heli.start} end={NOW} lineDurationSec={heli.lineSec} pWaves={HELI_PWAVES} timeZone='UTC' onClick={ms => setClicked(new Date(ms).toISOString())} />
-      <p>clicked: {clicked || '-'}</p>
-      <SpSeismograph data={recent} pWaves={PWAVES} unit='m/s' channel='HHZ' style={{ height: 240 }} />
-    </Section>
-  )
-}
-
-// 8. real data from an FDSN server (IRIS) via seisplotjs
-function FdsnExample() {
-  const [state, setState] = useState<{ status: string; streams?: StreamData[] }>({ status: 'idle' })
-  const load = async () => {
-    setState({ status: 'loading...' })
-    try {
-      const end = new Date(Date.now() - 3_600_000)
-      const range = sp.util.startEnd(sp.util.isoToDateTime(new Date(end.valueOf() - 600_000).toISOString()), sp.util.isoToDateTime(end.toISOString()))
-      const seismograms = await new sp.fdsndataselect.DataSelectQuery()
-        .networkCode('IU').stationCode('ANMO').locationCode('00').channelCode('BH?').timeRange(range).querySeismograms()
-      setState({ status: `${seismograms.length} channels`, streams: seismograms.map(s => ({ ...fromSeismogram(s), unit: 'counts' })) })
-    } catch (e) { setState({ status: `error: ${e}` }) }
-  }
-  return (
-    <Section title='Real data: FDSN dataselect (IRIS IU.ANMO)' text='seisplotjs fetches miniSEED; fromSeismogram() turns each Seismogram into StreamData (gaps held flat, codes from metadata).'>
-      <button onClick={load}>load last 10 min (1 h ago)</button> <span style={{ fontSize: 13 }}>{state.status}</span>
-      {state.streams && <SeismicStream streams={state.streams} displayHeight={360} />}
     </Section>
   )
 }
@@ -281,8 +260,52 @@ function ThemingExample() {
   )
 }
 
-const EXAMPLES = { historical: HistoricalExample, live: LiveExample, stream: StreamExample, stations: StationsExample, helicorder: HelicorderExample, liveHelicorder: LiveHelicorderExample, heliStream: StreamingHelicorderExample, seisplotjs: SeisplotjsExample, fdsn: FdsnExample, mseed: MseedExample, theming: ThemingExample }
+// colours from CSS variables: --rsg-primary (toolbar + trace), --rsg-<key> / --rsg-dark-<key> for any canvas colour.
+// Put them on :root for a global default, or on any wrapper (as here). The colors prop still wins.
+function CssColorsExample() {
+  const streams = useMemo(() => streamsOf(100), [])
+  const heliStart = Math.floor((NOW - 3_600_000) / 300_000) * 300_000
+  return (
+    <Section title='Colours from CSS variables' text='Toolbar and canvas share --rsg-primary. HHE overrides its trace with colors={{ white: { trace: "var(--brand-accent)" } }}. Toggle the theme: --rsg-dark-* applies in dark only.'>
+      <style>{`
+        /* global default would be :root { ... } */
+        .css-colors {
+          --brand: #7c3aed; --brand-accent: #db2777;
+          --rsg-primary: var(--brand);
+          --rsg-background: #faf5ff; --rsg-grid: rgba(124, 58, 237, 0.2); --rsg-frame: #ddd6fe;
+          --rsg-dark-primary: #c4b5fd; --rsg-dark-background: #1e1b4b; --rsg-dark-grid: rgba(196, 181, 253, 0.25);
+        }
+      `}</style>
+      <div className='css-colors'>
+        <SeismicStream
+          stationId='NP.KTM.00'
+          streams={streams}
+          defaultChannels={['HHZ', 'HHE']}
+          defaultViewMode='waveform'
+          displayHeight={240}
+          colors={(channel) => channel === 'HHE' ? { white: { trace: 'var(--brand-accent)' }, dark: { trace: 'var(--brand-accent)' } } : undefined}
+        />
+        <Helicorder startTime={heliStart} numLines={13} lineDurationSec={300} samples={heliSamples()} sampleRate={HELI_SR} dataStartTime={HELI_START} timeMode='UTC' height={360} title='NP.KTM.00.HHZ' />
+      </div>
+    </Section>
+  )
+}
+
+const EXAMPLES = { historical: HistoricalExample, live: LiveExample, stream: StreamExample, stations: StationsExample, zoomSync: ZoomSyncExample, helicorder: HelicorderExample, liveHelicorder: LiveHelicorderExample, heliStream: StreamingHelicorderExample, mseed: MseedExample, theming: ThemingExample, cssColors: CssColorsExample }
 type Key = keyof typeof EXAMPLES
+
+// how to use it in your app, under the live example
+function Code({ code }: { code?: string }) {
+  const [copied, setCopied] = useState(false)
+  if(!code) return null
+  const copy = () => navigator.clipboard?.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })
+  return (
+    <details open className='code'>
+      <summary>Usage <button type='button' onClick={(e) => { e.preventDefault(); copy() }}>{copied ? 'copied' : 'copy'}</button></summary>
+      <pre><code>{code}</code></pre>
+    </details>
+  )
+}
 
 function App() {
   const [tab, setTab] = useState<Key>(() => (location.hash.slice(1) as Key) in EXAMPLES ? location.hash.slice(1) as Key : 'historical')
@@ -295,6 +318,7 @@ function App() {
         <a href='./vanilla.html' style={{ alignSelf: 'center', marginLeft: 8, fontSize: 13 }}>plain HTML example →</a>
       </nav>
       <Example key={tab} />
+      <Code code={CODE[tab]} />
     </main>
   )
 }

@@ -83,3 +83,22 @@ assert.deepEqual(groups.map(g => [g.id, g.streams.map(s => s.channel)]), [['NP.K
 assert.equal(stationIdOf(undefined), 'unknown')
 
 console.log('core ok')
+
+// canvas colours from CSS variables: prop > --rsg-dark-<key> > --rsg-<key> > --rsg-primary > default; var() resolved
+{
+  const { resolveColors } = await import('../src/core/css.ts')
+  const vars: Record<string, string> = { '--rsg-primary': '#111', '--rsg-background': '#222', '--rsg-dark-background': '#333', '--brand': '#444' }
+  const saved = globalThis.getComputedStyle
+  Object.assign(globalThis, { getComputedStyle: () => ({ getPropertyValue: (n: string) => vars[n] ?? '' }) })
+  const el = {} as Element
+  const defaults = { trace: '#000', background: '#fff', grid: '#ccc', lines: ['#a', '#b'] }
+  assert.deepEqual(resolveColors(el, 'white', defaults, {}, ['trace']), { trace: '#111', background: '#222', grid: '#ccc', lines: ['#a', '#b'] })
+  assert.equal(resolveColors(el, 'dark', defaults).background, '#333')
+  assert.equal(resolveColors(el, 'white', defaults, { background: 'red' }).background, 'red')
+  assert.equal(resolveColors(el, 'white', defaults, { grid: 'var(--brand)', trace: 'var(--nope, var(--brand))', background: 'var(--nope)' }).grid, '#444')
+  assert.equal(resolveColors(el, 'white', defaults, { trace: 'var(--nope, var(--brand))' }).trace, '#444')
+  assert.equal(resolveColors(el, 'white', defaults, { background: 'var(--nope)' }).background, '#fff')
+  assert.equal(resolveColors(null, 'white', defaults, {}, ['trace']).trace, '#000')
+  Object.assign(globalThis, { getComputedStyle: saved })
+  console.log('ok resolveColors')
+}

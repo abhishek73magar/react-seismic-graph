@@ -1,9 +1,6 @@
-// miniSEED round trip through seisplotjs: written v3 bytes parse back with samples + codes
+// miniSEED round trip: written v3 bytes parse back with samples + codes
 import assert from 'node:assert/strict'
-// seisplotjs defines web components at import time: just enough DOM for that
-class Fake {}
-Object.assign(globalThis, { HTMLElement: Fake, customElements: { define() {}, get() {} }, window: globalThis, document: { createElement: () => ({}) } })
-const { parseMseed, streamsToMseed3, mseedFileName, mseedBytesOf, streamMseed } = await import('../src/seisplotjs/mseed.ts')
+const { parseMseed, streamsToMseed3, mseedFileName, mseedBytesOf, streamMseed } = await import('../src/mseed/index.ts')
 
 const start = Date.UTC(2024, 0, 1, 10)
 const samples = Float32Array.from({ length: 5000 }, (_, i) => Math.sin(i / 10) * 100)

@@ -1,6 +1,6 @@
 # react-seismic-graph
 
-Seismic plotting for the browser: a **waveform + spectrogram** canvas (Raspberry Shake DataView style), a **canvas helicorder**, and thin wrappers around **seisplotjs** (`<sp-helicorder>`, `<sp-seismograph>`). Use it from React or from plain HTML/JS.
+Seismic plotting for the browser: a **waveform + spectrogram** canvas (Raspberry Shake DataView style), a **canvas helicorder**, and a built-in miniSEED v2/v3 reader. No runtime dependencies (React only for the React components). Use it from React or from plain HTML/JS.
 
 **Live examples:** https://abhishek73magar.github.io/react-seismic-graph/ ([plain HTML version](https://abhishek73magar.github.io/react-seismic-graph/vanilla.html))
 
@@ -11,17 +11,14 @@ Extracted from the AlertNepal web app (`alertnepal_web_v3`, `components/Seismic`
 | `react-seismic-graph` | Framework-free core: `SpectrogramWidget`, `HelicorderWidget`, miniSEED decoding, helpers | nothing |
 | `react-seismic-graph/react` | React components (and re-exports the core) | `react` |
 | `react-seismic-graph/mseed` | miniSEED only: `parseMseed`, `streamMseed`, `loadMseed`, `streamsToMseed3`, `decodeRecords`, downloads | nothing |
-| `react-seismic-graph/react/seisplotjs` | `SpHelicorder`, `SpSeismograph` (React wrappers of seisplotjs' web components) | `react`, `seisplotjs` |
-| `react-seismic-graph/seisplotjs` | `renderSpHelicorder`, `renderSpSeismograph`, `toSeismogram` | `seisplotjs` |
 | `dist/seismic-graph.iife.js` | Core as one `<script>` file, global `SeismicGraph` | nothing |
 
 ## Install
 
 ```bash
 npm i react-seismic-graph
-# React components also need react; only the Sp* seisplotjs wrappers need seisplotjs:
+# React components also need react:
 npm i react
-npm i seisplotjs   # optional
 ```
 
 ## Data shape
@@ -76,8 +73,6 @@ Anything you don't pass is taken from the record headers:
 <SeismicStream mseed={file} />                                   // every channel of the file
 <SeismicStations mseed="https://service.earthscope.org/fdsnws/dataselect/1/query?net=IU&sta=ANMO&cha=BH?&start=...&end=..." />
 <Helicorder mseed={bytes} channelCode="HHZ" lineDurationSec={60} />
-<SpHelicorder mseed={bytes} lineDurationSec={60} />
-<SpSeismograph mseed={bytes} />
 ```
 
 ### Download
@@ -154,7 +149,7 @@ const onReady = useCallback((widget) => {
 
 **Flags.** Set `flags`, `flagEditable`, `onFlagAdd`, `onFlagMove` and `onFlagRemove`. Click to add a flag, drag to move it, right-click to remove it.
 
-**Colors.** The canvas (trace, grid, background, tooltips, ...) can't be styled with CSS, so pass `colors` / `fonts` instead. Both are per theme (`white` / `dark`), and any key you leave out keeps its default from `DEFAULT_COLORS` / `DEFAULT_FONTS` in `src/core/SpectrogramWidget.ts` — so a client that sends nothing gets the built-in look, and one that sends a partial palette only overrides what it specifies:
+**Colors.** Canvas colours (trace, grid, background, tooltips, ...) come from CSS variables or the `colors` prop (see [Theming](#theming)). `colors` / `fonts` are per theme (`white` / `dark`), and any key you leave out keeps its default from `DEFAULT_COLORS` / `DEFAULT_FONTS` in `src/core/SpectrogramWidget.ts` — so a client that sends nothing gets the built-in look, and one that sends a partial palette only overrides what it specifies:
 
 ```tsx
 <SeismicGraph
@@ -259,6 +254,24 @@ import { SeismicStations } from 'react-seismic-graph/react'
 
 It accepts every `SeismicStream` prop except `stationId` and `streams`.
 
+### Zoom sync across stations
+
+Each station's toolbar gets a sync button (↻) when it sits inside a `ZoomSync` — `SeismicStations` adds one itself. Synced stations share one zoom/pan: wheel-zoom or drag any of them and the rest follow, lined up on UTC time even when their data starts or ends at different times. Turning sync on for a station that was zoomed on its own snaps it to the shared view; turning it off keeps the current view, so nothing jumps. Double-click resets the shared view. The channel link button inside one station works as before (only linked channels follow the sync).
+
+```tsx
+import { SeismicStream, ZoomSync } from 'react-seismic-graph/react'
+
+<ZoomSync>
+  <SeismicStream stationId="NP.KTM.00" streams={ktm} defaultSynced />   {/* starts synced */}
+  <SeismicStream stationId="NP.PKR.00" streams={pkr} defaultSynced />
+  <SeismicStream stationId="NP.BRT.00" streams={brt} />                 {/* joins on click */}
+</ZoomSync>
+
+<SeismicStations stations={stations} defaultSynced />   // every station synced from the start
+```
+
+`ZoomSync` can wrap anything: the streams don't have to be siblings. Nested `SeismicStations` inside a `ZoomSync` join the outer group.
+
 ### `Helicorder`: our own canvas helicorder
 
 Each line covers `lineDurationSec`. For example, a 1-hour window drawn as 1-minute lines is `numLines={60} lineDurationSec={60}`, and a full day drawn as 1-hour lines is the default `24 × 3600`.
@@ -316,7 +329,6 @@ const stream = useCallback(async function* () {
 }, [])
 
 <Helicorder stream={stream} lineDurationSec={60} downloadable />
-<SpHelicorder stream={stream} start={start} end={end} lineDurationSec={60} />
 ```
 
 How it behaves:
@@ -330,23 +342,7 @@ How it behaves:
 
 `mseed={url | File | bytes}` uses the same path. Records are parsed as the bytes arrive: from the fetch body, from `Blob.stream()`, or from 1 MB slices of in-memory bytes with a pause between slices so the page can redraw.
 
-`SpHelicorder` redraws at most every 500 ms, because seisplotjs redraws the whole drum on each update.
-
 **Live helicorder.** `onReady` returns the widget. Call `widget.addSamples(samples, packetStartTime)` for each packet, and each packet lands at its own time.
-
-### seisplotjs components
-
-Separate entry, so the rest of the package never bundles seisplotjs:
-
-```tsx
-import { SpHelicorder, SpSeismograph } from 'react-seismic-graph/react/seisplotjs'
-
-<SpHelicorder data={seismograms /* or StreamData */} start={dayStart} end={dayEnd} lineDurationSec={3600} timeZone="UTC" pWaves={pWaves} onClick={(ms) => ...} />
-// lineDurationSec: 3600 = 1 h per line (default), 60 = 1 min per line, 600 = 10 min ...
-<SpSeismograph data={[hhz, hhn]} unit="m/s" channel="HHZ" pWaves={pWaves} style={{ height: 240 }} />
-```
-
-Both accept a `configure(config)` callback, so you can set any other seisplotjs config field.
 
 ## Plain HTML / vanilla JS
 
@@ -374,12 +370,12 @@ You can load it as an ES module:
   })
   heli.setData(daySamples, 100, Date.UTC(2024, 0, 1))
   heli.addSamples(packet, packetStartUtcMs)
-  // streamed history: any async iterable of StreamData; with seisplotjs: streamMseed(url | file | bytes)
+  // streamed history: any async iterable of StreamData, e.g. streamMseed(url | file | bytes)
   await heli.consume(pages, { autoStart: true, autoGrow: true, onChunk: (c, total) => {} })
 </script>
 ```
 
-You can also use a classic script tag. This build contains the core only, with no seisplotjs:
+You can also use a classic script tag. This build contains the core only:
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/react-seismic-graph/dist/seismic-graph.iife.js"></script>
@@ -388,17 +384,22 @@ You can also use a classic script tag. This build contains the core only, with n
 </script>
 ```
 
-To use the seisplotjs web components from plain JS, import from `react-seismic-graph/seisplotjs`. Your bundler or import map must be able to resolve `seisplotjs`:
-
-```js
-import { renderSpHelicorder, renderSpSeismograph } from 'react-seismic-graph/seisplotjs'
-renderSpSeismograph(document.querySelector('sp-seismograph'), streamData, { unit: 'm/s' })
-const off = renderSpHelicorder(document.querySelector('sp-helicorder'), seismograms, { start, end, onClick: (ms) => {} })
-```
-
 ## Theming
 
-Both widgets accept per-theme colour overrides:
+**CSS variables.** Both canvases read CSS custom properties from the canvas (inherited, so set them on `:root` for a global default or on any wrapper):
+
+```css
+:root {
+  --rsg-primary: #16a34a;          /* toolbar active button + waveform trace (helicorder: first line colour) */
+  --rsg-background: #fafafa;       /* any palette key in kebab-case: --rsg-grid, --rsg-tooltip-bg, --rsg-p-wave-line ... */
+  --rsg-dark-primary: #4ade80;     /* --rsg-dark-<key>: dark theme only, else --rsg-<key> applies to both */
+  --rsg-dark-background: #052e16;
+}
+```
+
+Order per key: `colors` prop > `--rsg-dark-<key>` (dark theme) > `--rsg-<key>` > `--rsg-primary` (trace, tooltip) > built-in default. A `colors` value may itself be a variable: `colors={{ white: { trace: 'var(--brand, #0284c7)' } }}`. Variables are read on mount, theme change, resize and `setPalette`/`setColors`; after changing them yourself (e.g. a CSS dark-mode class), call `widget.refreshColors()`.
+
+**Per-theme overrides in JS:**
 
 ```ts
 new SpectrogramWidget(canvas, { colors: { white: { trace: '#16a34a' }, dark: { background: '#0b1020' } }, fonts: { label: '11px monospace' } })
@@ -421,21 +422,21 @@ pnpm build:examples   # static site in site/, deployed to GitHub Pages on every 
 | `historical` | `SeismicGraph` with view/theme switch |
 | `live` | `SeismicGraph` fed through `onReady` + `addSamples` |
 | `stream` | `SeismicStream`: 3 channels of one station |
-| `stations` | `SeismicStations`: station-wise |
+| `stations` | `SeismicStations`: station-wise, with the built-in zoom sync |
+| `zoomSync` | `ZoomSync` around three `SeismicStream`s with different time ranges; two start synced, one joins on click |
 | `helicorder` | Own `Helicorder`, default last 1 h in 1-min lines (window and line length pickers); clicking a line opens ±5 min in `SeismicGraph` |
 | `liveHelicorder` | `Helicorder` with 60 × 1-min lines, live |
-| `heliStream` | 1 h of history arriving as 60 one-minute pages: `Helicorder` + `SpHelicorder` with `stream`, loading progress, download |
-| `seisplotjs` | `SpHelicorder` (default last 1 h in 1-min lines) + `SpSeismograph` |
-| `fdsn` | Real data from IRIS (IU.ANMO) via seisplotjs `DataSelectQuery` |
+| `heliStream` | 1 h of history arriving as 60 one-minute pages: `Helicorder` with `stream`, loading progress, download |
 | `mseed` | `mseed` prop with in-browser miniSEED 3 bytes, your own file, and an fdsnws URL (miniSEED 2); names from headers |
-| `vanilla.html` | Core widgets + seisplotjs in plain HTML, no React |
+| `cssColors` | Canvas + toolbar colours from CSS variables (`--rsg-primary`, `--rsg-dark-*`), one channel via `var()` in `colors` |
+| `vanilla.html` | Core widgets in plain HTML, no React, colours from CSS variables |
 
-The examples use synthetic data (`examples/synthetic.ts`); the `fdsn` example loads real data.
+The examples use synthetic data (`examples/synthetic.ts`); the `mseed` example can load real data from an fdsnws URL.
 
 ## Develop
 
 ```bash
-pnpm test        # core logic checks (node, no browser); decoder compared with seisplotjs on real FDSN files in test/fixtures
+pnpm test        # core logic checks (node, no browser); decoder compared with seisplotjs (devDependency, test only) on real FDSN files in test/fixtures
 pnpm typecheck
 pnpm build       # dist/: ESM + CJS per entry, IIFE core, .d.ts
 ```

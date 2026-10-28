@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { createContext, useContext, useMemo, useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import { toMs } from '../core/time'
 import { groupStations, stationIdOf } from '../core/seismogram'
 import type { MseedInput } from '../mseed'
@@ -20,18 +20,46 @@ const VIEW_MODES: { name: StreamViewMode; title: string }[] = [
 
 const REALTIME_LEFT_MARGIN_SEC = 5 // realtime: seconds of buffered data kept hidden past the left edge
 
-// per-channel zoom (seconds visible) and pan (seconds back from live); '*' = shared by all channels when linked
-const useLinkedZoom = () => {
+/** zoom/pan shared by synced stations: absolute right edge (UTC ms, null = axis end / live), so stations with different end times line up */
+export interface ZoomView { windowSec: number | null; rightMs: number | null }
+type SharedZoom = { view: ZoomView; setView: Dispatch<SetStateAction<ZoomView>> }
+const ZoomSyncContext = createContext<SharedZoom | null>(null)
+
+/** stations (SeismicStream) inside share one zoom/pan once their toolbar sync button is on; SeismicStations adds one itself */
+export function ZoomSync({ children }: { children: ReactNode }) {
+  const [view, setView] = useState<ZoomView>({ windowSec: null, rightMs: null })
+  const value = useMemo(() => ({ view, setView }), [view])
+  return <ZoomSyncContext.Provider value={value}>{children}</ZoomSyncContext.Provider>
+}
+
+// per-channel zoom (seconds visible) and pan (seconds back from live); '*' = shared by all channels when linked.
+// `shared` (station synced): linked channels use the cross-station view instead of '*'
+const useLinkedZoom = (shared: SharedZoom | null, axisEnd: number) => {
   const [zoomSec, setZoomSec] = useState<Record<string, number | null>>({})
   const [panSec, setPanSec] = useState<Record<string, number>>({})
   const [linkZoom, setLinkZoom] = useState(true)
   const key = (channel: string) => linkZoom ? '*' : channel
+  const s = linkZoom ? shared : null
+  const end = Number.isFinite(axisEnd) ? axisEnd : null
+  const toPan = (rightMs: number | null) => rightMs == null || end == null ? 0 : (end - rightMs) / 1000
+  const toRight = (sec: number) => sec === 0 || end == null ? null : end - sec * 1000
   return {
     linkZoom, setLinkZoom,
-    zoomOf: (channel: string) => zoomSec[key(channel)] ?? undefined,
-    setZoom: (channel: string) => (sec: number | null) => setZoomSec((prev) => ({ ...prev, [key(channel)]: sec })),
-    panOf: (channel: string) => panSec[key(channel)] ?? 0,
-    setPan: (channel: string) => (sec: number) => setPanSec((prev) => ({ ...prev, [key(channel)]: sec })),
+    zoomOf: (channel: string) => (s ? s.view.windowSec : zoomSec[key(channel)]) ?? undefined,
+    setZoom: (channel: string) => (sec: number | null) => s
+      ? s.setView((v) => ({ ...v, windowSec: sec }))
+      : setZoomSec((prev) => ({ ...prev, [key(channel)]: sec })),
+    panOf: (channel: string) => s ? toPan(s.view.rightMs) : panSec[key(channel)] ?? 0,
+    setPan: (channel: string) => (sec: number) => s
+      ? s.setView((v) => ({ ...v, rightMs: toRight(sec) }))
+      : setPanSec((prev) => ({ ...prev, [key(channel)]: sec })),
+    /** the station's own linked view, as a shared view (when it starts the sync) */
+    localView: (): ZoomView => ({ windowSec: zoomSec['*'] ?? null, rightMs: toRight(panSec['*'] ?? 0) }),
+    /** keep the shared view as its own when leaving the sync, so nothing jumps */
+    keepView: (v: ZoomView) => {
+      setZoomSec((prev) => ({ ...prev, '*': v.windowSec }))
+      setPanSec((prev) => ({ ...prev, '*': toPan(v.rightMs) }))
+    },
   }
 }
 
@@ -79,6 +107,8 @@ export interface SeismicStreamProps {
   /** shows a realtime enable/disable toggle in the toolbar; shown only when both are given. Each returns the resulting enabled state */
   onRealtimeEnable?: () => boolean
   onRealtimeDisable?: () => boolean
+  /** inside <ZoomSync> / SeismicStations: start with the station's zoom synced to the other stations; default false */
+  defaultSynced?: boolean
   /** shows a close button in the toolbar when given */
   onClose?: () => void
   className?: string
@@ -117,6 +147,7 @@ export function SeismicStream({
   onRealtimeEnable, 
   onRealtimeDisable, 
   onClose,
+  defaultSynced = false,
 }: SeismicStreamProps) {
   const m = useMseed(streamsProp ? null : mseed)
   const streams = streamsProp ?? m.streams
@@ -131,7 +162,6 @@ export function SeismicStream({
   const [viewMode, setViewMode] = useState<StreamViewMode>(defaultViewMode)
   const [theme, setTheme] = useState<ThemeName>(defaultTheme)
   const [yMode, setYMode] = useState<YMode>(defaultYMode)
-  const zoom = useLinkedZoom()
   const ic = { ...DEFAULT_ICONS, ...icons }
   const p = (name: Parameters<typeof part>[0], active = false) => part(name, classNames, unstyled, active)
 
@@ -166,6 +196,17 @@ export function SeismicStream({
       byChannel: Object.fromEntries(infos.map(i => [i.stream.channel, i])),
     }
   }, [streams, live])
+
+  // cross-station sync (toolbar button, only inside a ZoomSync): joining adopts the shared view, the first one in sets it
+  const sync = useContext(ZoomSyncContext)
+  const [synced, setSynced] = useState(defaultSynced)
+  const zoom = useLinkedZoom(sync && synced ? sync : null, prepared.axisEnd)
+  const toggleSync = () => {
+    if(!sync) return
+    if(synced) zoom.keepView(sync.view)
+    else if(sync.view.windowSec == null && sync.view.rightMs == null) sync.setView(zoom.localView())
+    setSynced(!synced)
+  }
 
   // stable per channel: SeismicGraph re-runs onReady whenever its identity changes
   const readyFor = useMemo(() => {
@@ -206,6 +247,7 @@ export function SeismicStream({
             <button type='button' {...p('button')} title={theme === 'white' ? 'Light theme - click for dark' : 'Dark theme - click for light'} aria-label='Toggle theme' onClick={() => setTheme(theme === 'white' ? 'dark' : 'white')}>{theme === 'white' ? ic.light : ic.dark}</button>
             <button type='button' {...p('button')} title='Raw values / offset from mean' onClick={() => setYMode(yMode === 'raw' ? 'offset' : 'raw')}>{yMode === 'raw' ? 'RAW' : 'OFFSET'}</button>
             <button type='button' {...p('button', zoom.linkZoom)} title={zoom.linkZoom ? 'Zoom/pan all channels together - click to unlink' : 'Zoom/pan one channel only - click to link'} aria-label='Link zoom and pan across channels' aria-pressed={zoom.linkZoom} onClick={() => zoom.setLinkZoom(!zoom.linkZoom)}>{zoom.linkZoom ? ic.link : ic.unlink}</button>
+            {sync && <button type='button' {...p('button', synced)} title={synced ? 'Zoom/pan synced with other stations - click to stop' : 'Sync zoom/pan with other stations'} aria-label='Sync zoom and pan across stations' aria-pressed={synced} onClick={toggleSync}>{ic.sync}</button>}
             {downloadable && <DownloadButton streams={streams.filter(s => selected.includes(s.channel) && s.samples.length > 0)} fallbackId={stationId} icon={ic.download} {...p('button')} />}
             {VIEW_MODES.map(m => <button type='button' key={m.name} title={m.title} aria-label={m.title} {...p('button', viewMode === m.name)} aria-pressed={viewMode === m.name} onClick={() => setViewMode(m.name)}>{ic[m.name]}</button>)}
             {canToggleRealtime && <button type='button' {...p('button', realtimeOn)} title={realtimeOn ? 'Realtime enabled - click to disable' : 'Realtime disabled - click to enable'} aria-label='Toggle realtime' aria-pressed={realtimeOn} onClick={toggleRealtime}>{ic.realtime}</button>}
@@ -267,17 +309,16 @@ export function SeismicStations({ stations: stationsProp, mseed, ...rest }: Seis
   const m = useMseed(stationsProp ? null : mseed)
   const stations = useMemo(() => stationsProp ?? groupStations(m.streams), [stationsProp, m.streams])
   const p = (name: 'empty' | 'station' | 'stationHeader') => part(name, rest.classNames, !!rest.unstyled)
+  const inSync = useContext(ZoomSyncContext)
   if(m.loading) return <div {...p('empty')}>Loading miniSEED…</div>
   if(m.error) return <div {...p('empty')}>miniSEED error: {m.error.message}</div>
   if(stations.length === 0) return <div {...p('empty')}>No stations</div>
-  return (
-    <>
-      {stations.map(st => (
-        <section key={st.id} {...p('station')} data-station={st.id}>
-          <header {...p('stationHeader')}>{st.title ?? st.id}</header>
-          <SeismicStream stationId={st.id} streams={st.streams} {...rest} />
-        </section>
-      ))}
-    </>
-  )
+  const list = stations.map(st => (
+    <section key={st.id} {...p('station')} data-station={st.id}>
+      <header {...p('stationHeader')}>{st.title ?? st.id}</header>
+      <SeismicStream stationId={st.id} streams={st.streams} {...rest} />
+    </section>
+  ))
+  // own sync group unless already inside one (then it syncs with the stations around it too)
+  return inSync ? <>{list}</> : <ZoomSync>{list}</ZoomSync>
 }

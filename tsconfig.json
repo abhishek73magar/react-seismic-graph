@@ -14,9 +14,7 @@
     "paths": {
       "react-seismic-graph": ["./src/index.ts"],
       "react-seismic-graph/react": ["./src/react/index.ts"],
-      "react-seismic-graph/react/seisplotjs": ["./src/react/seisplotjs.ts"],
-      "react-seismic-graph/mseed": ["./src/mseed/index.ts"],
-      "react-seismic-graph/seisplotjs": ["./src/seisplotjs/index.ts"]
+      "react-seismic-graph/mseed": ["./src/mseed/index.ts"]
     }
   },
   "include": ["src", "examples"]

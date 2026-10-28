@@ -4,6 +4,7 @@
  * gaps show as gaps and live packets can be written at their own time with addSamples().
  */
 import { formatTime, toMs } from './time';
+import { resolveColors } from './css';
 import type { PWave, Samples, StreamData, ThemeName } from './types';
 
 const HELI_COLORS = {
@@ -82,7 +83,9 @@ export class HelicorderWidget {
     sampleRate: number;
     height: number | undefined;
     theme: ThemeName;
-    palette: Record<ThemeName, HeliPalette>;
+    /** the `colors` option / setColors values; CSS variables (--rsg-<key>, --rsg-primary for the first line colour) and defaults fill the rest */
+    overrides: Partial<Record<ThemeName, Partial<HeliPalette>>>;
+    resolved!: HeliPalette;
     font: string;
     timeMode: string;
     gain: number;
@@ -124,10 +127,7 @@ export class HelicorderWidget {
         this.sampleRate = options.sampleRate || 100;
         this.height = options.height;
         this.theme = options.theme || 'white';
-        this.palette = {
-            white: { ...HELI_COLORS.white, ...(options.colors?.white || {}) },
-            dark: { ...HELI_COLORS.dark, ...(options.colors?.dark || {}) },
-        };
+        this.overrides = { white: { ...(options.colors?.white || {}) }, dark: { ...(options.colors?.dark || {}) } };
         this.font = options.font || '10px monospace';
         this.timeMode = options.timeMode || 'local';
         this.gain = options.gain || 1;
@@ -149,7 +149,15 @@ export class HelicorderWidget {
         this.resize();
     }
 
-    get colors() { return this.palette[this.theme === 'white' ? 'white' : 'dark']; }
+    get colors() { return this.resolved; }
+
+    /** re-read colours (see RaspTraceWidget.refreshColors); runs on theme change, resize and setColors */
+    refreshColors() {
+        const key = this.theme === 'white' ? 'white' : 'dark';
+        const c = resolveColors(this.canvas, key, HELI_COLORS[key], this.overrides[key], ['tooltipText']);
+        if (!this.overrides[key]?.lineColors) c.lineColors = [resolveColors(this.canvas, key, { primary: c.lineColors[0] }).primary, ...c.lineColors.slice(1)];
+        this.resolved = c;
+    }
     get totalSamples() { return Math.round(this.numLines * this.lineDurationSec * this.sampleRate); }
     get samplesPerLine() { return Math.round(this.lineDurationSec * this.sampleRate); }
 
@@ -256,8 +264,8 @@ export class HelicorderWidget {
         this.pWaves = list.map(p => ({ ...p, t: Date.parse(p.datetime) })).filter(p => !Number.isNaN(p.t));
         this.schedule();
     }
-    setTheme(theme: ThemeName) { this.theme = theme; this.schedule(); }
-    setColors(theme: ThemeName, overrides: Partial<HeliPalette>) { this.palette[theme] = { ...this.palette[theme], ...overrides }; this.schedule(); }
+    setTheme(theme: ThemeName) { this.theme = theme; this.refreshColors(); this.schedule(); }
+    setColors(theme: ThemeName, overrides: Partial<HeliPalette>) { this.overrides[theme] = { ...this.overrides[theme], ...overrides }; this.refreshColors(); this.schedule(); }
     setTimeMode(mode: string) { this.timeMode = mode; this.schedule(); }
     setGain(gain: number) { if (gain > 0) { this.gain = gain; this.schedule(); } }
     setClip(clip: boolean) { this.clip = clip; this.schedule(); }
@@ -267,6 +275,7 @@ export class HelicorderWidget {
     get cssHeight() { return this.height || this.numLines * 28 + M.top + M.bottom; }
 
     resize() {
+        this.refreshColors();
         const parent = this.canvas.parentElement;
         if (!parent) return;
         const dpr = window.devicePixelRatio || 1;

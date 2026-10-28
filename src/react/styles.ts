@@ -5,7 +5,8 @@ import type { CSSProperties } from 'react'
  *  1. CSS variables (no props): .my-app { --rsg-active-bg: #16a34a; --rsg-btn-radius: 2px }
  *  2. fixed class names on every part (rsg-toolbar, rsg-btn, rsg-btn[aria-pressed="true"], ...) or the classNames prop
  *  3. unstyled: no built-in inline styles at all, style everything with your own classes (e.g. Tailwind)
- * The canvas (trace, grid, background) can't read CSS: use the `colors` prop for that.
+ * --rsg-primary sets the active button and the canvas trace together. Canvas colours read --rsg-<key> / --rsg-dark-<key>
+ * (e.g. --rsg-trace, --rsg-background, --rsg-dark-grid) or the `colors` prop, which wins.
  */
 export type ClassNames = Partial<Record<Part, string>>
 export type Part = 'root' | 'toolbar' | 'group' | 'label' | 'button' | 'buttonActive' | 'row' | 'empty' | 'station' | 'stationHeader'
@@ -29,7 +30,8 @@ export const STYLES: Record<Exclude<Part, 'buttonActive'>, CSSProperties> = {
   stationHeader: { padding: '8px 12px', background: v('header-bg', '#f1f5f9'), color: v('header-color', 'inherit'), fontWeight: 700, fontSize: 14, fontFamily: font },
 }
 
-const ACTIVE: CSSProperties = { background: v('active-bg', '#0284c7'), color: v('active-color', '#fff'), borderColor: v('active-border', v('active-bg', '#0284c7')) }
+const primary = v('primary', '#0284c7')
+const ACTIVE: CSSProperties = { background: v('active-bg', primary), color: v('active-color', '#fff'), borderColor: v('active-border', v('active-bg', primary)) }
 
 /** className + style for one part: fixed rsg-* class, the caller's class, built-in style unless unstyled */
 export function part(name: Exclude<Part, 'buttonActive'>, classNames: ClassNames | undefined, unstyled: boolean, active = false) {

@@ -1,7 +1,7 @@
 {
   "name": "react-seismic-graph",
   "version": "0.3.0",
-  "description": "Seismic waveform + spectrogram, helicorder and seisplotjs wrappers for React and plain HTML",
+  "description": "Seismic waveform + spectrogram and helicorder for React and plain HTML",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -30,20 +30,10 @@
       "import": "./dist/react.js",
       "require": "./dist/react.cjs"
     },
-    "./react/seisplotjs": {
-      "types": "./dist/types/react/seisplotjs.d.ts",
-      "import": "./dist/react-seisplotjs.js",
-      "require": "./dist/react-seisplotjs.cjs"
-    },
     "./mseed": {
       "types": "./dist/types/mseed/index.d.ts",
       "import": "./dist/mseed.js",
       "require": "./dist/mseed.cjs"
-    },
-    "./seisplotjs": {
-      "types": "./dist/types/seisplotjs/index.d.ts",
-      "import": "./dist/seisplotjs.js",
-      "require": "./dist/seisplotjs.cjs"
     }
   },
   "unpkg": "./dist/seismic-graph.iife.js",
@@ -67,19 +57,14 @@
     "spectrogram",
     "helicorder",
     "waveform",
-    "seisplotjs",
     "react",
     "canvas"
   ],
   "peerDependencies": {
-    "react": ">=18",
-    "seisplotjs": ">=3"
+    "react": ">=18"
   },
   "peerDependenciesMeta": {
     "react": {
-      "optional": true
-    },
-    "seisplotjs": {
       "optional": true
     }
   },

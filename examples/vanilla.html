@@ -9,7 +9,8 @@
       main { max-width: 1200px; margin: 0 auto; padding: 16px; }
       section { background: #fff; border: 1px solid #e2e8f0; padding: 12px; margin-bottom: 16px; }
       h2 { margin: 0 0 8px; font-size: 16px; }
-      sp-helicorder, sp-seismograph { display: block; width: 100%; }
+      /* canvas colours from CSS: --rsg-<key> / --rsg-dark-<key>, --rsg-primary for the trace; :root for all widgets */
+      .orange { --rsg-dark-primary: #fb923c; --rsg-dark-background: #1c1917; }
     </style>
   </head>
   <body>
@@ -17,8 +18,8 @@
       <a href="./index.html">← React examples</a>
       <section>
         <h2>SpectrogramWidget (live, no framework)</h2>
-        <!-- the widget sizes the canvas to its parent's width -->
-        <div><canvas id="spectro"></canvas></div>
+        <!-- the widget sizes the canvas to its parent's width; colours come from the .orange CSS variables -->
+        <div class="orange"><canvas id="spectro"></canvas></div>
         <button id="mode">view: dual</button>
       </section>
       <section>
@@ -26,17 +27,12 @@
         <div><canvas id="heli"></canvas></div>
         <p id="clicked">click a line</p>
       </section>
-      <section>
-        <h2>seisplotjs &lt;sp-seismograph&gt;</h2>
-        <sp-seismograph id="sg" style="height: 220px"></sp-seismograph>
-      </section>
     </main>
 
     <script type="module">
       // in your page: import from 'https://cdn.jsdelivr.net/npm/react-seismic-graph/dist/index.js'
       // (or <script src=".../dist/seismic-graph.iife.js"> and use window.SeismicGraph)
       import { SpectrogramWidget, HelicorderWidget } from 'react-seismic-graph'
-      import { renderSpSeismograph } from 'react-seismic-graph/seisplotjs'
       import { makeTrace } from './synthetic.ts'
 
       const SR = 100
@@ -65,11 +61,6 @@
         onClick: (ms) => { document.getElementById('clicked').textContent = `clicked ${new Date(ms).toISOString()}` },
       })
       heli.setData(makeTrace(start, (now - start) / 1000, 20, [{ at: start + 2.2 * 3_600_000, amp: 12 }]), 20, start)
-
-      // seisplotjs element, plain samples in
-      renderSpSeismograph(document.getElementById('sg'), {
-        channel: 'HHZ', sampleRate: SR, startTime: now - 120_000, samples: makeTrace(now - 120_000, 120, SR, [{ at: now - 90_000, amp: 10 }]),
-      }, { unit: 'm/s', channel: 'HHZ' })
     </script>
   </body>
 </html>

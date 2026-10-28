@@ -10,6 +10,7 @@
  */
 
 import { formatTime } from './time';
+import { resolveColors } from './css';
 import type { PWave, Samples, ThemeName, ViewMode, YMode } from './types';
 
 type RGBA = [number, number, number, number]
@@ -182,6 +183,7 @@ class RealFFT {
  * All colours and fonts used by the widget, per theme. Change them here only.
  * Per-instance overrides: new RaspTraceWidget(canvas, { colors: { white: { text: '#111' } } })
  * or at runtime: widget.setColors('dark', { trace: '#0f0' }).
+ * Or from CSS, no JS: :root { --rsg-primary: #16a34a; --rsg-background: #fafafa; --rsg-dark-trace: #4ade80 } (key in kebab-case).
  */
 const DEFAULT_COLORS = {
     white: {
@@ -305,7 +307,9 @@ class RaspTraceWidget {
     stationId: string;
     viewMode: ViewMode;
     theme: ThemeName;
-    palette: Record<ThemeName, Palette>;
+    /** the `colors` option / setColors values, per theme; CSS variables and defaults fill the rest (refreshColors) */
+    overrides: Partial<Record<ThemeName, Partial<Palette>>>;
+    resolved!: Palette;
     fonts: Fonts;
     timeMode: string;
     timeWindowSec: number;
@@ -376,7 +380,7 @@ class RaspTraceWidget {
         this.viewMode = options.viewMode || 'dual'; // dual view by default: dual | waveform | spectrogram
         this.theme = options.theme || 'white';
         // resolved here; render code only reads this.colors / this.fonts
-        this.palette = { white: DEFAULT_COLORS.white as Palette, dark: DEFAULT_COLORS.dark as Palette };
+        this.overrides = {};
         this.setPalette(options.colors);
         this.fonts = { ...DEFAULT_FONTS, ...(options.fonts || {}) };
         this.timeMode = options.timeMode || 'local';
@@ -492,19 +496,28 @@ class RaspTraceWidget {
 
     setTheme(theme: ThemeName) {
         this.theme = theme;
+        this.refreshColors();
     }
 
     /** current theme's colours ('white' -> white palette, anything else -> dark) */
     get colors() {
-        return this.theme === 'white' ? this.palette.white : this.palette.dark;
+        return this.resolved;
+    }
+
+    /**
+     * re-read the palette: colors option > --rsg-dark-<key> (dark) > --rsg-<key> > --rsg-primary (trace, tooltip) > default.
+     * Runs on theme change, resize and setPalette/setColors; call it after changing those CSS variables yourself.
+     */
+    // ponytail: CSS changes are picked up on these calls only, not live (MutationObserver if that's ever needed)
+    refreshColors() {
+        const key = this.theme === 'white' ? 'white' : 'dark';
+        this.resolved = resolveColors(this.canvas, key, { ...DEFAULT_COLORS.shared, ...DEFAULT_COLORS[key] }, this.overrides[key], ['trace', 'tooltipBorder', 'tooltipText']);
     }
 
     /** replace all colour overrides (defaults + these); unlike setColors, keys left out go back to the default */
     setPalette(colors: RaspTraceWidgetOptions['colors'] = {}) {
-        this.palette = {
-            white: { ...DEFAULT_COLORS.shared, ...DEFAULT_COLORS.white, ...(colors?.white || {}) },
-            dark: { ...DEFAULT_COLORS.shared, ...DEFAULT_COLORS.dark, ...(colors?.dark || {}) },
-        };
+        this.overrides = { white: { ...(colors?.white || {}) }, dark: { ...(colors?.dark || {}) } };
+        this.refreshColors();
     }
 
     setFonts(fonts: Partial<Fonts> = {}) {
@@ -514,7 +527,8 @@ class RaspTraceWidget {
     /** override colours at runtime, e.g. setColors('white', { text: '#111' }) */
     setColors(theme: ThemeName, overrides: Partial<Palette> = {}) {
         const key = theme === 'white' ? 'white' : 'dark';
-        this.palette[key] = { ...this.palette[key], ...overrides };
+        this.overrides[key] = { ...this.overrides[key], ...overrides };
+        this.refreshColors();
     }
 
     /** x of a P-wave flag inside a plot starting at x with given width, or null when outside the time window */
@@ -763,6 +777,7 @@ class RaspTraceWidget {
     resize() {
         const parent = this.canvas.parentElement;
         if (!parent) return;
+        this.refreshColors();
 
         const dpr = window.devicePixelRatio || 1;
         // content box, not border box: the canvas is 100% of the parent's content width, so sizing it to the

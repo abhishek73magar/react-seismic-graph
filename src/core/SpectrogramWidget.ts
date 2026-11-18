@@ -1501,6 +1501,9 @@ class RaspTraceWidget {
         ctx.fillText('Frequency (Hz)', 0, 0);
 
         ctx.restore();
+        // pairs with the save at the top of renderSpectrogram: without it one canvas state leaks per
+        // frame, and Safari (which caps the state stack) ends up drawing the plots with a stuck rotation
+        ctx.restore();
     }
 
     renderPWaves(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number) {

@@ -1318,11 +1318,15 @@ class RaspTraceWidget {
             ctx.restore();
 
             // scale + unit badge, horizontal in the plot's top-left corner (readable, unlike the rotated title)
-            const badgeText = `${expLabel}${unitLabel} · mean ${mean.toPrecision(4)} ${unitLabel} · ${raw ? 'RAW' : 'OFFSET'}`;
+            let badgeText = `${expLabel}${unitLabel} · mean ${mean.toPrecision(4)} ${unitLabel} · ${raw ? 'RAW' : 'OFFSET'}`;
             ctx.save();
             ctx.font = this.fonts.scale;
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
+            // on narrow plots drop the mean so the badge still fits
+            if (ctx.measureText(badgeText).width + 10 > width - 8) {
+                badgeText = `${expLabel}${unitLabel} · ${raw ? 'RAW' : 'OFFSET'}`;
+            }
             const bw = ctx.measureText(badgeText).width + 10;
             const bh = 18;
             const bx = x + 4;
@@ -1578,10 +1582,11 @@ class RaspTraceWidget {
         ctx.fillRect(x, y, width, height);
 
         const totalSec = this.timeWindowSec;
-        const numTicks = 6;
         const nowMs = this.lastSampleUtc - this.panOffsetSec * 1000; // shift with pan so axis matches crosshair/flags
 
         ctx.font = this.fonts.label;
+        // fit the tick count to the width (a fixed 6 intervals runs labels together on phones)
+        const numTicks = Math.max(1, Math.min(6, Math.floor(width / (ctx.measureText('00:00:00').width + 14))));
         ctx.fillStyle = c.text;
         ctx.textAlign = 'center';
         ctx.strokeStyle = c.tick;
